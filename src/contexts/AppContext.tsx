@@ -93,59 +93,9 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Dados simulados para demonstração (será substituído por dados reais do Supabase)
-const clientesIniciais: Cliente[] = [
-  {
-    id: '1',
-    nome: 'Maria Silva',
-    telefone: '(11) 99999-9999',
-    cpf: '123.456.789-00',
-    endereco: 'Rua das Flores, 123 - São Paulo',
-    email: 'maria@email.com',
-    dataCadastro: new Date('2024-01-15')
-  },
-  {
-    id: '2',
-    nome: 'João Santos',
-    telefone: '(11) 88888-8888',
-    cpf: '987.654.321-00',
-    endereco: 'Av. Principal, 456 - São Paulo',
-    email: 'joao@email.com',
-    dataCadastro: new Date('2024-02-20')
-  }
-];
+const clientesIniciais: Cliente[] = [];
 
-const agendamentosIniciais: Agendamento[] = [
-  {
-    id: '1',
-    clienteId: '1',
-    cliente: 'Maria Silva',
-    tipo: 'Consulta',
-    data: new Date(),
-    horaInicio: '09:00',
-    duracao: 60,
-    status: 'confirmado'
-  },
-  {
-    id: '2',
-    clienteId: '2',
-    cliente: 'João Santos',
-    tipo: 'Retorno',
-    data: new Date(),
-    horaInicio: '10:30',
-    duracao: 30,
-    status: 'pendente'
-  },
-  {
-    id: '3',
-    clienteId: '1',
-    cliente: 'Maria Silva',
-    tipo: 'Tratamento',
-    data: new Date(Date.now() + 24 * 60 * 60 * 1000), // amanhã
-    horaInicio: '14:00',
-    duracao: 90,
-    status: 'confirmado'
-  }
-];
+const agendamentosIniciais: Agendamento[] = [];
 
 // Configurações padrão
 const settingsIniciais: UserSettings = {

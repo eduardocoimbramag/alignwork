@@ -140,7 +140,7 @@ const Profile = () => {
                                         <Calendar className="w-4 h-4 text-brand-purple" />
                                         <div>
                                             <p className="text-sm text-muted-foreground">Membro desde</p>
-                                            <p className="font-medium">Janeiro 2024</p>
+                                            <p className="font-medium">Não informado</p>
                                         </div>
                                     </div>
                                 </div>

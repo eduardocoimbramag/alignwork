@@ -37,54 +37,61 @@ const RecentAppointments = () => {
           Próximas Consultas
         </CardTitle>
       </CardHeader>
-      
+
       <CardContent className="space-y-4 max-h-96 overflow-y-auto">
-        {proximasConsultas.map((consulta) => (
-          <div key={consulta.id} className="relative flex items-center justify-between p-3 rounded-lg border hover:bg-gray-200/80 transition-all duration-200" style={{ backgroundColor: 'rgb(252, 249, 252)' }}>
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center">
-                <User className="w-5 h-5 text-white" />
+        {proximasConsultas.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-gray-500 mb-2">Nenhuma consulta agendada</div>
+            <div className="text-sm text-gray-400">As próximas consultas aparecerão aqui</div>
+          </div>
+        ) : (
+          proximasConsultas.map((consulta) => (
+            <div key={consulta.id} className="relative flex items-center justify-between p-3 rounded-lg border hover:bg-gray-200/80 transition-all duration-200" style={{ backgroundColor: 'rgb(252, 249, 252)' }}>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center">
+                  <User className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{consulta.cliente}</p>
+                  <p className="text-sm text-muted-foreground">{consulta.tipo}</p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-foreground">{consulta.cliente}</p>
-                <p className="text-sm text-muted-foreground">{consulta.tipo}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-end justify-center">
-                <p className="font-semibold text-foreground mb-1">{consulta.horaInicio}</p>
-                <div className="flex items-center justify-end gap-2">
-                  <Badge 
-                    className={getBadgeVariant(consulta.status)}
-                    onClick={() => handleStatusChange(consulta.id, consulta.status)}
-                  >
-                    {consulta.status === 'concluido' && <CheckCircle className="w-3 h-3 mr-1" />}
-                    {consulta.status === 'confirmado' ? 'Confirmado' : 
-                     consulta.status === 'concluido' ? 'Concluído' : 
-                     consulta.status === 'desmarcado' ? 'Desmarcado' : 'Pendente'}
-                  </Badge>
-                  {consulta.status === 'confirmado' && (
-                    <button
-                      onClick={() => setConsultaAberta(consulta.id)}
-                      className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end justify-center">
+                  <p className="font-semibold text-foreground mb-1">{consulta.horaInicio}</p>
+                  <div className="flex items-center justify-end gap-2">
+                    <Badge
+                      className={getBadgeVariant(consulta.status)}
+                      onClick={() => handleStatusChange(consulta.id, consulta.status)}
                     >
-                      <Play className="w-3 h-3 text-white fill-white" />
-                    </button>
-                  )}
-                  {consulta.status === 'pendente' && (
-                    <button
-                      className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <Hourglass className="w-3 h-3 text-white" />
-                    </button>
-                  )}
+                      {consulta.status === 'concluido' && <CheckCircle className="w-3 h-3 mr-1" />}
+                      {consulta.status === 'confirmado' ? 'Confirmado' :
+                        consulta.status === 'concluido' ? 'Concluído' :
+                          consulta.status === 'desmarcado' ? 'Desmarcado' : 'Pendente'}
+                    </Badge>
+                    {consulta.status === 'confirmado' && (
+                      <button
+                        onClick={() => setConsultaAberta(consulta.id)}
+                        className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
+                      >
+                        <Play className="w-3 h-3 text-white fill-white" />
+                      </button>
+                    )}
+                    {consulta.status === 'pendente' && (
+                      <button
+                        className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
+                      >
+                        <Hourglass className="w-3 h-3 text-white" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-        
-        <TelaConsultaModal 
+          ))
+        )}
+
+        <TelaConsultaModal
           agendamentoId={consultaAberta}
           isOpen={!!consultaAberta}
           onClose={() => setConsultaAberta(null)}
