@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 from models.user import Base
-from routes import auth
+from routes import auth, appointments
 from auth.dependencies import get_db
 
 # Load environment variables
@@ -50,6 +50,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 # Include routers
 app.include_router(auth.router, prefix="/api")
+app.include_router(appointments.router, prefix="/api")
 
 @app.get("/")
 async def root():

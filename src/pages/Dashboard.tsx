@@ -119,7 +119,7 @@ const Dashboard = () => {
             <RecentAppointments />
 
             {/* Coluna do meio: Calendário interativo */}
-            <InteractiveCalendar />
+            <InteractiveCalendar tenantId="default-tenant" />
 
             {/* Coluna direita: Ações rápidas */}
             <div className="space-y-6">

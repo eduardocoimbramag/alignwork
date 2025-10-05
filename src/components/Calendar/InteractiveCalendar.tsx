@@ -3,6 +3,7 @@ import { Calendar, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CalendarModal } from "./CalendarModal";
+import { DashboardCalendarCard } from "@/components/DashboardCalendarCard";
 
 /**
  * COMPONENTE DE CALENDÁRIO INTERATIVO
@@ -17,7 +18,7 @@ import { CalendarModal } from "./CalendarModal";
  * - Integra com dados de agendamentos
  */
 
-const InteractiveCalendar = () => {
+const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
   // Estado para controlar se o modal está aberto ou fechado
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -50,23 +51,7 @@ const InteractiveCalendar = () => {
             </div>
 
             {/* Resumo rápido dos próximos agendamentos */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-brand-pink/10 to-brand-purple/10">
-                <div>
-                  <div className="text-sm font-medium">Hoje - 0 consultas</div>
-                  <div className="text-xs text-muted-foreground">Nenhuma consulta agendada</div>
-                </div>
-                <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-              </div>
-
-              <div className="flex items-center justify-between p-2 rounded-lg bg-gradient-to-r from-brand-pink/10 to-brand-purple/10">
-                <div>
-                  <div className="text-sm font-medium">Amanhã - 0 consultas</div>
-                  <div className="text-xs text-muted-foreground">Nenhuma consulta agendada</div>
-                </div>
-                <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-              </div>
-            </div>
+            <DashboardCalendarCard tenantId={tenantId} />
 
             {/* Botão para abrir calendário completo */}
             <Button
