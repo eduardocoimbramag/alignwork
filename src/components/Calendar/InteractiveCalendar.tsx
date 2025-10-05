@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CalendarModal } from "./CalendarModal";
 import { DashboardCalendarCard } from "@/components/DashboardCalendarCard";
+import { DashboardCalendarStats } from "@/components/DashboardCalendarStats";
 
 /**
  * COMPONENTE DE CALENDÁRIO INTERATIVO
@@ -45,9 +46,7 @@ const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
               <h3 className="text-xl font-bold text-foreground capitalize">
                 {monthName}
               </h3>
-              <p className="text-sm text-muted-foreground">
-                Clique para ver agenda completa
-              </p>
+              <DashboardCalendarStats tenantId={tenantId} />
             </div>
 
             {/* Resumo rápido dos próximos agendamentos */}

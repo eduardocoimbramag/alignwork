@@ -5,8 +5,26 @@ from zoneinfo import ZoneInfo
 from auth.dependencies import get_db
 from models.appointment import Appointment
 from schemas.appointment import AppointmentCreate, AppointmentUpdate, AppointmentResponse
+from sqlalchemy import and_
 
 router = APIRouter(prefix="/v1/appointments", tags=["appointments"])
+
+def _count_bucket(db: Session, tenant_id: str, start_local: datetime, end_local: datetime, TZ: ZoneInfo):
+    # Converte limites locais -> UTC para filtrar starts_at (UTC)
+    start_utc = start_local.astimezone(ZoneInfo("UTC"))
+    end_utc   = end_local.astimezone(ZoneInfo("UTC"))
+
+    q = (
+        db.query(Appointment)
+          .filter(Appointment.tenant_id == tenant_id)
+          .filter(Appointment.starts_at >= start_utc)
+          .filter(Appointment.starts_at <  end_utc)
+          .filter(Appointment.status.in_(["confirmed","pending"]))
+    )
+
+    confirmed = q.filter(Appointment.status == "confirmed").count()
+    pending   = q.filter(Appointment.status == "pending").count()
+    return {"confirmed": confirmed, "pending": pending}
 
 @router.get("/summary")
 def get_summary(
@@ -56,6 +74,53 @@ def get_summary(
             summary[bucket]["pending"] += 1
 
     return summary
+
+@router.get("/mega-stats")
+def mega_stats(
+    response: Response,
+    tenantId: str = Query(...),
+    tz: str = Query("America/Recife"),
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+
+    TZ = ZoneInfo(tz)
+    now_local = datetime.now(TZ)
+
+    # Hoje (início do dia local → início do dia seguinte local)
+    today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end   = today_start + timedelta(days=1)
+
+    # Semana vigente: domingo → sábado (considerando semana DOM-SÁB)
+    # weekday(): Monday=0 ... Sunday=6 ; queremos domingo=0, sábado=6 em base local.
+    # Converte para índice DOM=0:
+    dow = (now_local.weekday() + 1) % 7  # se segunda=0 => dom=6; ajustamos
+    # Melhor abordagem: obter o domingo mais recente:
+    # Se dow==0 (domingo), start é hoje; senão, retrocede dow dias.
+    sunday_start = today_start - timedelta(days=dow)
+    saturday_end = sunday_start + timedelta(days=7)  # intervalo meio-aberto [dom, próximo dom)
+
+    # Mês vigente
+    month_start = today_start.replace(day=1)
+    # início do próximo mês:
+    if month_start.month == 12:
+        next_month_start = month_start.replace(year=month_start.year+1, month=1)
+    else:
+        next_month_start = month_start.replace(month=month_start.month+1)
+
+    # Próximo mês: [início do próximo mês, início do mês seguinte]
+    if next_month_start.month == 12:
+        after_next_month_start = next_month_start.replace(year=next_month_start.year+1, month=1)
+    else:
+        after_next_month_start = next_month_start.replace(month=next_month_start.month+1)
+
+    stats = {
+        "today":     _count_bucket(db, tenantId, today_start, today_end, TZ),
+        "week":      _count_bucket(db, tenantId, sunday_start, saturday_end, TZ),
+        "month":     _count_bucket(db, tenantId, month_start, next_month_start, TZ),
+        "nextMonth": _count_bucket(db, tenantId, next_month_start, after_next_month_start, TZ),
+    }
+    return stats
 
 @router.post("/", response_model=AppointmentResponse)
 def create_appointment(

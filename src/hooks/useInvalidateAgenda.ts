@@ -8,7 +8,8 @@ export function useInvalidateAgenda(tenantId: string) {
             const dayKey = dayjs(startsAtUTC).format('YYYY-MM-DD')
             qc.invalidateQueries({ queryKey: ['appointmentsByDay', tenantId, dayKey] })
         }
-        qc.invalidateQueries({ queryKey: ['dashboardSummary', tenantId] })
-        qc.invalidateQueries({ queryKey: ['calendarMonth', tenantId] }) // se existir
+        qc.invalidateQueries({ queryKey: ['dashboardSummary', tenantId] })       // Calendário Hoje/Amanhã
+        qc.invalidateQueries({ queryKey: ['dashboardMegaStats', tenantId] })     // NOVO: os 4 contadores
+        qc.invalidateQueries({ queryKey: ['calendarMonth', tenantId] })          // se existir
     }
 }
