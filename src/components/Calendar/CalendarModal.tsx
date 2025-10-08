@@ -161,7 +161,7 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                   classNames={{
                     months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 w-full",
                     month: "space-y-4 w-full",
-                    caption: "flex justify-center pt-1 relative items-center px-8",
+                    caption: "flex justify-start pt-1 relative items-center px-8",
                     caption_label: "text-sm font-medium",
                     nav: "space-x-1 flex items-center",
                     nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 border border-input hover:bg-accent hover:text-accent-foreground rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -169,10 +169,10 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                     nav_button_next: "absolute right-1",
                     table: "w-full border-collapse space-y-1",
                     head_row: "flex w-full",
-                    head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1 text-center",
+                    head_cell: "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] flex-1 text-left pl-2",
                     row: "flex w-full mt-2 gap-1",
-                    cell: "relative flex-1 text-center text-sm p-0 focus-within:relative focus-within:z-20",
-                    day: "h-12 w-full p-0 font-normal aria-selected:opacity-100 relative flex items-center justify-center rounded-md transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    cell: "relative flex-1 text-left text-sm p-0 focus-within:relative focus-within:z-20",
+                    day: "h-12 w-full p-0 font-normal aria-selected:opacity-100 relative flex items-center justify-start pl-2 rounded-md transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                     day_selected: "bg-gradient-to-br from-brand-purple/20 to-brand-pink/20 text-foreground hover:bg-gradient-to-br hover:from-brand-pink/20 hover:to-brand-purple/20 focus:bg-gradient-to-br focus:from-brand-purple/20 focus:to-brand-pink/20",
                     day_today: "bg-brand-pink/30 text-foreground font-semibold",
                   }}
@@ -186,7 +186,7 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                           {...props}
                           className={cn(
                             "h-12 w-full p-0 font-normal relative rounded-md transition-all duration-200",
-                            "flex items-center justify-center focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            "flex items-center justify-start pl-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             selectedDate && isSameDay(date, selectedDate)
                               ? 'bg-gradient-to-br from-brand-purple/20 to-brand-pink/20 text-foreground hover:bg-gradient-to-br hover:from-brand-pink/20 hover:to-brand-purple/20'
                               : hasAppts
@@ -231,13 +231,13 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {isLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Clock className="w-12 h-12 mx-auto mb-2 opacity-50 animate-spin" />
+                  <div className="py-8 text-muted-foreground">
+                    <Clock className="w-12 h-12 mb-2 opacity-50 animate-spin" />
                     <p className="text-lg">Carregando...</p>
                   </div>
                 ) : selectedDateAppointments.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <div className="py-8 text-muted-foreground">
+                    <Clock className="w-12 h-12 mb-2 opacity-50" />
                     <p className="text-lg">Nenhum agendamento</p>
                     <p className="text-sm">Esta data está disponível</p>
                   </div>

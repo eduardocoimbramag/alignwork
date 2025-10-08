@@ -3,7 +3,6 @@ import { Calendar, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CalendarModal } from "./CalendarModal";
-import { DashboardCalendarCard } from "@/components/DashboardCalendarCard";
 import { DashboardCalendarStats } from "@/components/DashboardCalendarStats";
 
 /**
@@ -14,9 +13,9 @@ import { DashboardCalendarStats } from "@/components/DashboardCalendarStats";
  * mostrando todos os meses, dias e agendamentos.
  * 
  * Funcionalidades:
- * - Mostra um resumo do mês atual
+ * - Mostra estatísticas de agendamentos (hoje, semana, mês, próximo mês)
  * - Ao clicar, abre modal com calendário completo
- * - Integra com dados de agendamentos
+ * - Integra com dados de agendamentos em tempo real
  */
 
 const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
@@ -42,15 +41,12 @@ const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
         <CardContent>
           <div className="space-y-3">
             {/* Título do mês atual */}
-            <div className="text-center">
+            <div>
               <h3 className="text-xl font-bold text-foreground capitalize">
                 {monthName}
               </h3>
               <DashboardCalendarStats tenantId={tenantId} />
             </div>
-
-            {/* Resumo rápido dos próximos agendamentos */}
-            <DashboardCalendarCard tenantId={tenantId} />
 
             {/* Botão para abrir calendário completo */}
             <Button
