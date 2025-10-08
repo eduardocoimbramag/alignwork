@@ -1,26 +1,79 @@
 import { useDashboardMegaStats } from '@/hooks/useDashboardMegaStats'
+import { Skeleton } from '@/components/ui/skeleton'
 
 function DashboardCalendarStats({ tenantId }: { tenantId: string }) {
     const { data, isLoading, error } = useDashboardMegaStats(tenantId)
 
     if (isLoading) {
         return (
-            <p className="text-sm text-muted-foreground">Carregando estatísticas…</p>
+            <div className="space-y-2 mt-4">
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+                <Skeleton className="h-12 w-full rounded-lg" />
+            </div>
         )
     }
 
     if (error || !data) {
         return (
-            <p className="text-sm text-muted-foreground">Não foi possível carregar as estatísticas.</p>
+            <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-100">
+                <p className="text-xs text-red-600 text-center">
+                    Não foi possível carregar as estatísticas.
+                </p>
+            </div>
         )
     }
 
+    const periods = [
+        {
+            label: 'Hoje',
+            confirmed: data.today.confirmed,
+            pending: data.today.pending,
+            color: 'bg-brand-green',
+            gradient: 'from-brand-green/10 to-brand-lime/10'
+        },
+        {
+            label: 'Essa semana',
+            confirmed: data.week.confirmed,
+            pending: data.week.pending,
+            color: 'bg-brand-purple',
+            gradient: 'from-brand-purple/10 to-brand-pink/10'
+        },
+        {
+            label: 'Esse mês',
+            confirmed: data.month.confirmed,
+            pending: data.month.pending,
+            color: 'bg-brand-pink',
+            gradient: 'from-brand-pink/10 to-brand-purple/10'
+        },
+        {
+            label: 'Próximo mês',
+            confirmed: data.nextMonth.confirmed,
+            pending: data.nextMonth.pending,
+            color: 'bg-brand-lime',
+            gradient: 'from-brand-lime/10 to-brand-green/10'
+        }
+    ]
+
     return (
-        <div className="space-y-1 text-sm text-muted-foreground">
-            <div>Hoje — {data.today.confirmed} Confirmadas / {data.today.pending} Pendentes</div>
-            <div>Essa semana — {data.week.confirmed} Confirmadas / {data.week.pending} Pendentes</div>
-            <div>Esse mês — {data.month.confirmed} Confirmadas / {data.month.pending} Pendentes</div>
-            <div>Próximo mês — {data.nextMonth.confirmed} Confirmadas / {data.nextMonth.pending} Pendentes</div>
+        <div className="space-y-2 mt-4">
+            {periods.map((period) => (
+                <div
+                    key={period.label}
+                    className={`flex items-center justify-between p-3 rounded-lg bg-gradient-to-r ${period.gradient} border border-transparent hover:border-brand-purple/20 transition-all duration-200`}
+                >
+                    <div className="flex-1">
+                        <div className="text-sm font-medium text-foreground">
+                            {period.label} — {period.confirmed + period.pending} consultas
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                            {period.confirmed} confirmadas, {period.pending} pendentes
+                        </div>
+                    </div>
+                    <div className={`w-3 h-3 rounded-full ${period.color} flex-shrink-0`} />
+                </div>
+            ))}
         </div>
     )
 }
