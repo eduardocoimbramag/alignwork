@@ -33,7 +33,7 @@ const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
     <>
       {/* Card do calendário no dashboard */}
       <Card className="cursor-pointer hover:shadow-lg transition-all duration-300 group">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-lg font-semibold">Calendário</CardTitle>
           <Calendar className="w-5 h-5 text-brand-purple group-hover:scale-110 transition-transform" />
         </CardHeader>
@@ -42,7 +42,7 @@ const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
           <div className="space-y-3">
             {/* Título do mês atual */}
             <div>
-              <h3 className="text-xl font-bold text-foreground capitalize">
+              <h3 className="text-lg font-semibold text-foreground capitalize mb-1">
                 {monthName}
               </h3>
               <DashboardCalendarStats tenantId={tenantId} />

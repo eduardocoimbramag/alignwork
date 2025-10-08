@@ -6,19 +6,19 @@ function DashboardCalendarStats({ tenantId }: { tenantId: string }) {
 
     if (isLoading) {
         return (
-            <div className="space-y-2 mt-4">
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
-                <Skeleton className="h-12 w-full rounded-lg" />
+            <div className="space-y-1.5 mt-2">
+                <Skeleton className="h-14 w-full rounded-lg" />
+                <Skeleton className="h-14 w-full rounded-lg" />
+                <Skeleton className="h-14 w-full rounded-lg" />
+                <Skeleton className="h-14 w-full rounded-lg" />
             </div>
         )
     }
 
     if (error || !data) {
         return (
-            <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-100">
-                <p className="text-xs text-red-600 text-center">
+            <div className="mt-2 py-2 px-3 rounded-lg bg-red-50 border border-red-100">
+                <p className="text-xs text-red-600">
                     Não foi possível carregar as estatísticas.
                 </p>
             </div>
@@ -31,7 +31,7 @@ function DashboardCalendarStats({ tenantId }: { tenantId: string }) {
             confirmed: data.today.confirmed,
             pending: data.today.pending,
             color: 'bg-brand-green',
-            gradient: 'from-brand-green/10 to-brand-lime/10'
+            gradient: 'from-brand-purple/10 to-brand-pink/10'
         },
         {
             label: 'Essa semana',
@@ -41,27 +41,27 @@ function DashboardCalendarStats({ tenantId }: { tenantId: string }) {
             gradient: 'from-brand-purple/10 to-brand-pink/10'
         },
         {
-            label: 'Esse mês',
+            label: 'Mês vigente',
             confirmed: data.month.confirmed,
             pending: data.month.pending,
-            color: 'bg-brand-pink',
-            gradient: 'from-brand-pink/10 to-brand-purple/10'
+            color: 'bg-brand-purple',
+            gradient: 'from-brand-purple/10 to-brand-pink/10'
         },
         {
-            label: 'Próximo mês',
+            label: 'Mês subsequente',
             confirmed: data.nextMonth.confirmed,
             pending: data.nextMonth.pending,
-            color: 'bg-brand-lime',
-            gradient: 'from-brand-lime/10 to-brand-green/10'
+            color: 'bg-brand-purple',
+            gradient: 'from-brand-purple/10 to-brand-pink/10'
         }
     ]
 
     return (
-        <div className="space-y-2 mt-4">
+        <div className="space-y-1.5 mt-2">
             {periods.map((period) => (
                 <div
                     key={period.label}
-                    className={`flex items-center justify-between p-3 rounded-lg bg-gradient-to-r ${period.gradient} border border-transparent hover:border-brand-purple/20 transition-all duration-200`}
+                    className={`flex items-center justify-between py-2 px-3 rounded-lg bg-gradient-to-r ${period.gradient} border border-transparent hover:border-brand-purple/20 transition-all duration-200`}
                 >
                     <div className="flex-1">
                         <div className="text-sm font-medium text-foreground">
