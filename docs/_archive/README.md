@@ -1,20 +1,16 @@
-# 🚀 AlignWork - Sistema de Gestão de Consultórios
+# AlignWork - Documentação Técnica Completa
 
-> **Sistema SaaS completo** para gerenciamento de consultas e agendamentos  
-> **Documentação consolidada:** Outubro 2025
+## 📋 Índice
 
-## 📋 Navegação Rápida
-
-| Documento | O que você encontra |
-|-----------|---------------------|
-| **[INDEX.md](./INDEX.md)** 📚 | **COMECE AQUI** - Índice completo da documentação |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) 🏗️ | Stack, padrões arquiteturais, decisões técnicas |
-| [API.md](./API.md) 🔌 | Referência completa de endpoints REST |
-| [RUNBOOK.md](./RUNBOOK.md) ⚙️ | Setup, instalação, comandos, debug |
-| [CONTRIBUTING.md](./CONTRIBUTING.md) 🤝 | Workflow Git, commits, PRs, code review |
-| [ROADMAP.md](./ROADMAP.md) 🗺️ | Features planejadas, releases futuras |
-| [SECURITY.md](./SECURITY.md) 🔒 | Práticas de segurança, compliance |
-| [CHANGELOG.md](./CHANGELOG.md) 📝 | Histórico de versões e mudanças |
+1. [Visão Geral do Projeto](#visão-geral-do-projeto)
+2. [Arquitetura do Sistema](./arquitetura.md)
+3. [Backend - FastAPI](./backend.md)
+4. [Frontend - React](./frontend.md)
+5. [Autenticação e Segurança](./autenticacao.md)
+6. [Sistema de Agendamentos](./agendamentos.md)
+7. [Fluxo de Dados](./fluxo-dados.md)
+8. [Guia de Desenvolvimento](./guia-desenvolvimento.md)
+9. [API Reference](./api-reference.md)
 
 ---
 
@@ -205,29 +201,24 @@ O sistema utiliza JWT tokens armazenados em httpOnly cookies para segurança:
 
 ---
 
-## 📖 Próximos Passos
+## Próximos Passos
 
-### Primeira Vez no Projeto?
+Para entender o sistema em detalhes, consulte os documentos específicos:
 
-1. **[INDEX.md](./INDEX.md)** 📚 - Comece aqui para navegar pela documentação completa
-2. **[RUNBOOK.md](./RUNBOOK.md)** ⚙️ - Configure seu ambiente de desenvolvimento
-3. **[ARCHITECTURE.md](./ARCHITECTURE.md)** 🏗️ - Entenda a arquitetura do sistema
-4. **[CONTRIBUTING.md](./CONTRIBUTING.md)** 🤝 - Aprenda o workflow de contribuição
+### 📚 Documentação Principal
+1. **[INDICE.md](./INDICE.md)** - 🗺️ Índice navegável completo (COMECE AQUI!)
+2. **[Arquitetura do Sistema](./arquitetura.md)** - Diagrama e visão geral da arquitetura
+3. **[Backend - FastAPI](./backend.md)** - Detalhes da implementação do backend
+4. **[Frontend - React](./frontend.md)** - Estrutura e componentes do frontend
+5. **[Autenticação](./autenticacao.md)** - Sistema de autenticação JWT
+6. **[API Reference](./api-reference.md)** - Referência completa da API
+7. **[Guia de Desenvolvimento](./guia-desenvolvimento.md)** - Como desenvolver features
 
-### Referências Úteis
+### 📝 Guias de Implementação
+8. **[Implementação do Calendário Funcional](./implementacao-calendario-funcional.md)** - ✅ Guia detalhado (IMPLEMENTADO)
 
-- **[API.md](./API.md)** 🔌 - Todos os endpoints documentados
-- **[SECURITY.md](./SECURITY.md)** 🔒 - Práticas de segurança
-- **[ROADMAP.md](./ROADMAP.md)** 🗺️ - Visão de produto e features futuras
-- **[CHANGELOG.md](./CHANGELOG.md)** 📝 - Histórico de mudanças
-
-### Documentos Arquivados
-
-Os documentos antigos foram consolidados e movidos para `_archive/`:
-- `api-reference.md` → Consolidado em [API.md](./API.md)
-- `arquitetura.md`, `autenticacao.md`, `backend.md`, `frontend.md` → Consolidado em [ARCHITECTURE.md](./ARCHITECTURE.md)
-- `guia-desenvolvimento.md` → Dividido em [RUNBOOK.md](./RUNBOOK.md) e [CONTRIBUTING.md](./CONTRIBUTING.md)
-- Ver [INDEX.md](./INDEX.md) para detalhes completos da migração
+### 📋 Histórico
+9. **[CHANGELOG.md](./CHANGELOG.md)** - 🔄 Registro de todas as mudanças do projeto
 
 ---
 
@@ -248,5 +239,5 @@ Informações sobre licença a serem definidas.
 
 ---
 
-**Última atualização:** Outubro 2025 - Documentação Consolidada v2.0
+**Última atualização:** 05/10/2025 - Implementação do Calendário Funcional
 
