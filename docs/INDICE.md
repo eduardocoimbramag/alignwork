@@ -89,6 +89,7 @@ Conteúdo:
   - useAppointmentMutations
   - useDashboardSummary
   - useDashboardMegaStats
+  - useMonthAppointments (NOVO)
   - useInvalidateAgenda
 - 🎨 Componentes principais
   - ProtectedRoute
@@ -177,7 +178,8 @@ Conteúdo:
 - 📅 Appointments Endpoints
   - GET /api/v1/appointments/summary
   - GET /api/v1/appointments/mega-stats
-  - POST /api/v1/appointments/
+  - GET /api/v1/appointments/ (Lista appointments - NOVO)
+  - POST /api/v1/appointments/ (Cria appointment)
   - PATCH /api/v1/appointments/{id}
 - ❤️ Health Checks
   - GET /

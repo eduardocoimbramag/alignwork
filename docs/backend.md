@@ -543,6 +543,43 @@ Cookie: access_token=eyJ0eXAiOiJKV1QiLCJhbGc...
 3. Usa função `_count_bucket` para cada período
 4. Retorna estatísticas agregadas
 
+#### GET /api/v1/appointments/
+
+**Propósito:** Listar agendamentos com filtros opcionais
+
+**Query Parameters:**
+- `tenantId` (required): ID do tenant
+- `from` (optional): Data início (ISO string)
+- `to` (optional): Data fim (ISO string)
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "tenant_id": "tenant-123",
+    "patient_id": "patient-456",
+    "starts_at": "2025-10-10T14:00:00",
+    "duration_min": 60,
+    "status": "confirmed",
+    "created_at": "2025-10-05T10:30:00",
+    "updated_at": "2025-10-05T10:30:00"
+  }
+]
+```
+
+**Lógica:**
+1. Filtra appointments por tenant (obrigatório)
+2. Se `from` fornecido, filtra `starts_at >= from`
+3. Se `to` fornecido, filtra `starts_at < to`
+4. Ordena por `starts_at` crescente
+5. Retorna lista completa (todos os status)
+
+**Uso:**
+- Calendário mensal
+- Listagem completa de agendamentos
+- Busca por intervalo de datas
+
 #### POST /api/v1/appointments/
 
 **Propósito:** Criar novo agendamento

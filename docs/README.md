@@ -29,13 +29,14 @@
 ### Principais Características
 
 - ✅ **Autenticação JWT** com tokens httpOnly cookies
-- 📅 **Calendário Interativo** com visualização mensal
+- 📅 **Calendário Interativo Funcional** com navegação entre meses, seleção de datas e visualização de agendamentos
 - 👥 **Gestão de Pacientes** completa
 - 📊 **Dashboard** com estatísticas em tempo real
-- 🔄 **React Query** para gerenciamento de estado assíncrono
-- 🎨 **UI Moderna** com shadcn/ui e Tailwind CSS
+- 🔄 **React Query** para gerenciamento de estado assíncrono e cache
+- 🎨 **UI Moderna** com shadcn/ui e Tailwind CSS + animações suaves
 - 🌐 **Multi-timezone** suporte (America/Recife)
 - 📱 **Responsivo** para desktop e mobile
+- 🎯 **Indicadores visuais** com badges coloridos por status
 
 ---
 
@@ -204,14 +205,20 @@ O sistema utiliza JWT tokens armazenados em httpOnly cookies para segurança:
 
 Para entender o sistema em detalhes, consulte os documentos específicos:
 
-1. **[Arquitetura do Sistema](./arquitetura.md)** - Diagrama e visão geral da arquitetura
-2. **[Backend - FastAPI](./backend.md)** - Detalhes da implementação do backend
-3. **[Frontend - React](./frontend.md)** - Estrutura e componentes do frontend
-4. **[Autenticação](./autenticacao.md)** - Sistema de autenticação JWT
-5. **[Sistema de Agendamentos](./agendamentos.md)** - Funcionalidades de agendamento
-6. **[Fluxo de Dados](./fluxo-dados.md)** - Como os dados fluem no sistema
+### 📚 Documentação Principal
+1. **[INDICE.md](./INDICE.md)** - 🗺️ Índice navegável completo (COMECE AQUI!)
+2. **[Arquitetura do Sistema](./arquitetura.md)** - Diagrama e visão geral da arquitetura
+3. **[Backend - FastAPI](./backend.md)** - Detalhes da implementação do backend
+4. **[Frontend - React](./frontend.md)** - Estrutura e componentes do frontend
+5. **[Autenticação](./autenticacao.md)** - Sistema de autenticação JWT
+6. **[API Reference](./api-reference.md)** - Referência completa da API
 7. **[Guia de Desenvolvimento](./guia-desenvolvimento.md)** - Como desenvolver features
-8. **[API Reference](./api-reference.md)** - Referência completa da API
+
+### 📝 Guias de Implementação
+8. **[Implementação do Calendário Funcional](./implementacao-calendario-funcional.md)** - ✅ Guia detalhado (IMPLEMENTADO)
+
+### 📋 Histórico
+9. **[CHANGELOG.md](./CHANGELOG.md)** - 🔄 Registro de todas as mudanças do projeto
 
 ---
 
@@ -232,5 +239,5 @@ Informações sobre licença a serem definidas.
 
 ---
 
-**Última atualização:** Outubro 2025
+**Última atualização:** 05/10/2025 - Implementação do Calendário Funcional
 

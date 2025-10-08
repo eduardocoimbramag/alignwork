@@ -80,3 +80,53 @@ export async function api<T = any>(
         );
     }
 }
+
+// Helper methods para facilitar o uso
+api.get = async function <T = any>(
+    path: string,
+    options: { params?: Record<string, any>; headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    const { params, headers } = options;
+    let url = path;
+
+    if (params) {
+        const queryString = new URLSearchParams(
+            Object.entries(params).reduce((acc, [key, value]) => {
+                if (value !== undefined && value !== null) {
+                    acc[key] = String(value);
+                }
+                return acc;
+            }, {} as Record<string, string>)
+        ).toString();
+        url = `${path}${queryString ? '?' + queryString : ''}`;
+    }
+
+    const data = await api<T>(url, { method: 'GET', headers });
+    return { data, status: 200, ok: true };
+};
+
+api.post = async function <T = any>(
+    path: string,
+    body: any,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    const data = await api<T>(path, {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: options.headers,
+    });
+    return { data, status: 201, ok: true };
+};
+
+api.patch = async function <T = any>(
+    path: string,
+    body: any,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    const data = await api<T>(path, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+        headers: options.headers,
+    });
+    return { data, status: 200, ok: true };
+};

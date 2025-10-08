@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from typing import List, Optional
 from auth.dependencies import get_db
 from models.appointment import Appointment
 from schemas.appointment import AppointmentCreate, AppointmentUpdate, AppointmentResponse
@@ -74,6 +75,30 @@ def get_summary(
             summary[bucket]["pending"] += 1
 
     return summary
+
+@router.get("/", response_model=List[AppointmentResponse])
+def list_appointments(
+    response: Response,
+    tenantId: str = Query(...),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    db: Session = Depends(get_db),
+):
+    """Lista agendamentos com filtros opcionais por data."""
+    response.headers["Cache-Control"] = "no-store"
+    
+    query = db.query(Appointment).filter(Appointment.tenant_id == tenantId)
+    
+    if from_date:
+        from_dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+        query = query.filter(Appointment.starts_at >= from_dt)
+    
+    if to_date:
+        to_dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+        query = query.filter(Appointment.starts_at < to_dt)
+    
+    appointments = query.order_by(Appointment.starts_at).all()
+    return appointments
 
 @router.get("/mega-stats")
 def mega_stats(

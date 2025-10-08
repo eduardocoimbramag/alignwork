@@ -75,6 +75,7 @@ src/
 │   ├── useAppointmentMutations.ts
 │   ├── useDashboardSummary.ts
 │   ├── useDashboardMegaStats.ts
+│   ├── useMonthAppointments.ts
 │   └── useInvalidateAgenda.ts
 ├── pages/               # Páginas
 │   ├── Dashboard.tsx
@@ -88,6 +89,7 @@ src/
 │   └── auth.ts        # Serviço de autenticação
 ├── types/             # Definições TypeScript
 │   ├── auth.ts
+│   ├── appointment.ts
 │   └── consulta.ts
 ├── lib/              # Utilitários
 │   ├── utils.ts
@@ -384,6 +386,98 @@ function AgendamentosList() {
 
 ---
 
+## TypeScript Types
+
+### src/types/appointment.ts
+
+**Propósito:** Definições de tipos para appointments da API
+
+```typescript
+export interface Appointment {
+  id: number;
+  tenant_id: string;
+  patient_id: string;
+  starts_at: string;  // ISO 8601 UTC timestamp
+  duration_min: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AppointmentCreate {
+  tenantId: string;
+  patientId: string;
+  startsAt: string;  // ISO 8601 UTC timestamp
+  durationMin: number;
+  status?: 'pending' | 'confirmed';
+}
+
+export interface AppointmentUpdate {
+  status: 'pending' | 'confirmed' | 'cancelled';
+}
+```
+
+**Uso:**
+```typescript
+import type { Appointment } from '@/types/appointment';
+
+function AppointmentCard({ appointment }: { appointment: Appointment }) {
+  const localTime = dayjs(appointment.starts_at)
+    .tz('America/Recife')
+    .format('HH:mm');
+  
+  return (
+    <div>
+      <h3>Paciente: {appointment.patient_id}</h3>
+      <p>Horário: {localTime}</p>
+      <p>Status: {appointment.status}</p>
+    </div>
+  );
+}
+```
+
+**Características:**
+- Alinhados com schemas Pydantic do backend
+- Status com union types para type safety
+- Timestamps em formato ISO 8601 UTC
+- Separação clara entre create, update e response types
+
+### src/types/auth.ts
+
+**Propósito:** Definições de tipos para autenticação
+
+```typescript
+export interface User {
+  id: number;
+  email: string;
+  username: string;
+  full_name?: string;
+  is_active: boolean;
+  is_verified: boolean;
+  created_at: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  username: string;
+  password: string;
+  full_name?: string;
+}
+
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+```
+
+---
+
 ## Serviços de API
 
 ### api.ts - Cliente HTTP Base
@@ -423,11 +517,68 @@ export async function api<T = any>(
 }
 ```
 
+**Helper Methods:**
+```typescript
+// GET com query params
+api.get = async function<T = any>(
+    path: string,
+    options: { params?: Record<string, any>; headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    // Converte params em query string
+    // Retorna { data, status, ok }
+};
+
+// POST com body JSON
+api.post = async function<T = any>(
+    path: string,
+    body: any,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    // Serializa body como JSON
+    // Retorna { data, status, ok }
+};
+
+// PATCH com body JSON
+api.patch = async function<T = any>(
+    path: string,
+    body: any,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    // Serializa body como JSON
+    // Retorna { data, status, ok }
+};
+```
+
+**Uso dos helpers:**
+```typescript
+// GET com query params
+const { data } = await api.get<Appointment[]>('/v1/appointments/', {
+  params: { tenantId: 'abc', from: '2025-10-01T00:00:00Z' },
+  headers: { 'Cache-Control': 'no-cache' }
+});
+
+// POST
+const { data } = await api.post('/v1/appointments/', {
+  tenantId: 'abc',
+  patientId: '123',
+  startsAt: '2025-10-10T14:00:00Z',
+  durationMin: 60
+});
+
+// PATCH
+const { data } = await api.patch('/v1/appointments/1', {
+  status: 'confirmed'
+});
+```
+
 **Características:**
 - `credentials: 'include'`: Envia cookies httpOnly
 - Error handling customizado
 - Type-safe com generics
 - Base URL configurável via .env
+- Helper methods para GET/POST/PATCH
+- Query params automáticos em GET
+- Response wrapper com status e ok
 
 ### auth.ts - Serviço de Autenticação
 
@@ -611,6 +762,80 @@ export function useDashboardMegaStats(tenantId: string) {
     });
 }
 ```
+
+### useMonthAppointments
+
+**Arquivo:** `src/hooks/useMonthAppointments.ts`
+
+**Propósito:** Buscar agendamentos de um mês específico para o calendário
+
+```typescript
+export function useMonthAppointments(tenantId: string, year: number, month: number) {
+    // Início do mês no timezone local
+    const monthStart = dayjs()
+        .tz('America/Recife')
+        .year(year)
+        .month(month)
+        .startOf('month')
+        .toISOString();
+
+    // Início do próximo mês
+    const nextMonthStart = dayjs()
+        .tz('America/Recife')
+        .year(year)
+        .month(month)
+        .add(1, 'month')
+        .startOf('month')
+        .toISOString();
+
+    return useQuery({
+        queryKey: ['appointments', tenantId, year, month],
+        queryFn: async () => {
+            const { data } = await api.get<Appointment[]>('/v1/appointments/', {
+                params: { 
+                    tenantId, 
+                    from: monthStart, 
+                    to: nextMonthStart, 
+                },
+                headers: { 'Cache-Control': 'no-cache' }
+            });
+            return data;
+        },
+        staleTime: 30_000,        // Cache por 30 segundos
+        refetchOnWindowFocus: true  // Recarrega ao focar janela
+    });
+}
+```
+
+**Uso:**
+```typescript
+function CalendarModal({ tenantId }: { tenantId: string }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  
+  const { data: appointments, isLoading } = useMonthAppointments(tenantId, year, month);
+  
+  // Navegar para próximo mês
+  const handleNextMonth = () => {
+    setCurrentDate(prev => dayjs(prev).add(1, 'month').toDate());
+  };
+  
+  return (
+    <div>
+      <Calendar appointments={appointments} />
+      <button onClick={handleNextMonth}>Próximo Mês</button>
+    </div>
+  );
+}
+```
+
+**Características:**
+- Query key dinâmico baseado em tenant, ano e mês
+- Cache automático por 30 segundos
+- Refetch ao focar janela
+- Timezone America/Recife
+- Retorna lista completa de appointments do mês
 
 ### useInvalidateAgenda
 

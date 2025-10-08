@@ -144,3 +144,52 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Animações para o Calendário Interativo */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.calendar-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Hover nos dias do calendário */
+.rdp-day:hover {
+  background-color: hsl(var(--brand-purple) / 0.1) !important;
+  transition: all 0.2s ease;
+  transform: scale(1.05);
+}
+
+/* Dia selecionado */
+.rdp-day_selected {
+  background: linear-gradient(135deg, hsl(var(--brand-purple)), hsl(var(--brand-pink))) !important;
+  color: white !important;
+  font-weight: bold !important;
+}
+
+/* Dia com agendamentos */
+.rdp-day.hasAppointments {
+  position: relative;
+  font-weight: 600;
+}
+
+.rdp-day.hasAppointments::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: hsl(var(--brand-purple));
+}

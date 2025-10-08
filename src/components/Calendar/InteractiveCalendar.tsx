@@ -68,6 +68,7 @@ const InteractiveCalendar = ({ tenantId }: { tenantId: string }) => {
       <CalendarModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        tenantId={tenantId}
       />
     </>
   );

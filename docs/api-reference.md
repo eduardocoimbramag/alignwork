@@ -11,7 +11,17 @@ Referência completa de todos os endpoints da API AlignWork.
 ## Índice
 
 - [Authentication](#authentication)
+  - POST /api/auth/register
+  - POST /api/auth/login
+  - POST /api/auth/refresh
+  - POST /api/auth/logout
+  - GET /api/auth/me
 - [Appointments](#appointments)
+  - GET /api/v1/appointments/summary
+  - GET /api/v1/appointments/mega-stats
+  - GET /api/v1/appointments/ (Lista appointments)
+  - POST /api/v1/appointments/ (Cria appointment)
+  - PATCH /api/v1/appointments/{id}
 
 ---
 
@@ -325,6 +335,74 @@ GET /api/v1/appointments/mega-stats?tenantId=tenant-123&tz=America/Recife
 ```
 Cache-Control: no-store
 ```
+
+---
+
+### GET /api/v1/appointments/
+
+Lista todos os agendamentos com filtros opcionais por data.
+
+**Endpoint:** `/api/v1/appointments/`
+
+**Método:** `GET`
+
+**Autenticação:** Não requerida (futuro: será protegida)
+
+**Query Parameters:**
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|-----------|------|-------------|-----------|
+| `tenantId` | string | Sim | ID do tenant/consultório |
+| `from` | string | Não | Data início (ISO 8601 UTC) |
+| `to` | string | Não | Data fim (ISO 8601 UTC) |
+
+**Exemplo Request:**
+```
+GET /api/v1/appointments/?tenantId=tenant-123&from=2025-10-01T00:00:00.000Z&to=2025-10-31T23:59:59.999Z
+```
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": 1,
+    "tenant_id": "tenant-123",
+    "patient_id": "patient-456",
+    "starts_at": "2025-10-10T14:00:00",
+    "duration_min": 60,
+    "status": "confirmed",
+    "created_at": "2025-10-05T10:30:00",
+    "updated_at": "2025-10-05T10:30:00"
+  },
+  {
+    "id": 2,
+    "tenant_id": "tenant-123",
+    "patient_id": "patient-789",
+    "starts_at": "2025-10-15T10:00:00",
+    "duration_min": 30,
+    "status": "pending",
+    "created_at": "2025-10-05T11:00:00",
+    "updated_at": "2025-10-05T11:00:00"
+  }
+]
+```
+
+**Lógica:**
+- Filtra appointments por `tenantId` (obrigatório)
+- Se `from` fornecido, filtra `starts_at >= from`
+- Se `to` fornecido, filtra `starts_at < to`
+- Ordena por `starts_at` crescente
+- Retorna todos os status (pending, confirmed, cancelled)
+
+**Headers Response:**
+```
+Cache-Control: no-store
+```
+
+**Uso comum:**
+- Calendário mensal: `/api/v1/appointments/?tenantId=X&from=2025-10-01T00:00:00Z&to=2025-11-01T00:00:00Z`
+- Todos appointments: `/api/v1/appointments/?tenantId=X`
+- Intervalo específico: `/api/v1/appointments/?tenantId=X&from=START&to=END`
 
 ---
 
