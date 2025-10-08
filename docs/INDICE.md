@@ -202,7 +202,24 @@ Conteúdo:
 
 ---
 
-### 7. [guia-desenvolvimento.md](./guia-desenvolvimento.md) - Guia de Desenvolvimento
+### 7. [solucao-estatisticas-dashboard.md](./solucao-estatisticas-dashboard.md) - Solução: Estatísticas do Dashboard
+**Resolução do erro de carregamento de estatísticas.**
+
+Conteúdo:
+- 📋 Problema identificado
+- 🔍 Análise detalhada do erro
+- ✅ Solução passo a passo
+- 🧪 Testes completos
+- 🚨 Troubleshooting adicional
+- 📊 Diagrama de fluxo
+- 🔮 Melhorias futuras
+- 🎉 Considerações finais
+
+**Quando usar:** Erro no carregamento de estatísticas, problemas com API endpoints, debug de URLs incorretas.
+
+---
+
+### 8. [guia-desenvolvimento.md](./guia-desenvolvimento.md) - Guia de Desenvolvimento
 **Instruções práticas para desenvolver no projeto.**
 
 Conteúdo:
@@ -257,6 +274,7 @@ Conteúdo:
 3. 🚀 [guia-desenvolvimento.md](./guia-desenvolvimento.md) - Setup e primeiro desenvolvimento
 4. 🔐 [autenticacao.md](./autenticacao.md) - Entenda autenticação
 5. 🐍 [backend.md](./backend.md) ou ⚛️ [frontend.md](./frontend.md) - Foque na sua área
+6. 🔧 [solucao-estatisticas-dashboard.md](./solucao-estatisticas-dashboard.md) - Exemplo de debug
 
 ### Para Arquitetos/Tech Leads
 
@@ -306,18 +324,19 @@ Conteúdo:
 - **Segurança:** [autenticacao.md](./autenticacao.md) + [arquitetura.md](./arquitetura.md) (seção Segurança)
 - **Deployment:** [arquitetura.md](./arquitetura.md) (seção Deployment)
 - **Como adicionar feature:** [guia-desenvolvimento.md](./guia-desenvolvimento.md) (seção Adicionar Nova Feature)
-- **Troubleshooting:** [guia-desenvolvimento.md](./guia-desenvolvimento.md) (seção Troubleshooting)
+- **Troubleshooting:** [guia-desenvolvimento.md](./guia-desenvolvimento.md) (seção Troubleshooting) + [solucao-estatisticas-dashboard.md](./solucao-estatisticas-dashboard.md)
 - **Boas Práticas:** [guia-desenvolvimento.md](./guia-desenvolvimento.md) (seção Boas Práticas)
+- **Erro de Estatísticas:** [solucao-estatisticas-dashboard.md](./solucao-estatisticas-dashboard.md)
 
 ---
 
 ## 📊 Estatísticas da Documentação
 
-- **Total de documentos:** 7
-- **Páginas estimadas:** ~150 páginas (se impresso)
-- **Tópicos cobertos:** 100+
-- **Exemplos de código:** 200+
-- **Diagramas:** 5+
+- **Total de documentos:** 8
+- **Páginas estimadas:** ~180 páginas (se impresso)
+- **Tópicos cobertos:** 110+
+- **Exemplos de código:** 220+
+- **Diagramas:** 6+
 
 ---
 

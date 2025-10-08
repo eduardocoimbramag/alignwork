@@ -14,7 +14,7 @@ export function useDashboardSummary(tenantId: string) {
     return useQuery({
         queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
         queryFn: async () => {
-            const { data } = await api.get<DashboardSummary>('/v1/appointments/summary', {
+            const { data } = await api.get<DashboardSummary>('/api/v1/appointments/summary', {
                 params: { tenantId, from: fromISO, to: toISO, tz: TZ },
                 headers: { 'Cache-Control': 'no-cache' }
             })

@@ -26,7 +26,7 @@ export function useMonthAppointments(tenantId: string, year: number, month: numb
     return useQuery({
         queryKey: ['appointments', tenantId, year, month],
         queryFn: async () => {
-            const { data } = await api.get<Appointment[]>('/v1/appointments/', {
+            const { data } = await api.get<Appointment[]>('/api/v1/appointments/', {
                 params: {
                     tenantId,
                     from: monthStart,

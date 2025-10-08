@@ -14,7 +14,7 @@ export function useDashboardMegaStats(tenantId: string, tz = 'America/Recife') {
     return useQuery({
         queryKey: ['dashboardMegaStats', tenantId, tz],
         queryFn: async () => {
-            const { data } = await api.get<MegaStats>('/v1/appointments/mega-stats', {
+            const { data } = await api.get<MegaStats>('/api/v1/appointments/mega-stats', {
                 params: { tenantId, tz },
                 headers: { 'Cache-Control': 'no-cache' }
             })

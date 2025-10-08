@@ -24,7 +24,7 @@ export function useCreateAppointment(tenantId: string) {
         mutationFn: async (payload: Omit<CreateInput, 'tenantId'>) => {
             const startsAtUTC = dayjs.tz(payload.startsAtLocal, 'America/Recife').utc().toISOString()
             const body = { ...payload, tenantId, startsAt: startsAtUTC }
-            const { data } = await api.post('/v1/appointments', body, {
+            const { data } = await api.post('/api/v1/appointments', body, {
                 headers: { 'Cache-Control': 'no-cache' }
             })
             return data
@@ -37,7 +37,7 @@ export function useUpdateAppointmentStatus(tenantId: string) {
     const invalidate = useInvalidateAgenda(tenantId)
     return useMutation({
         mutationFn: async (payload: UpdateStatusInput) => {
-            const { data } = await api.patch(`/v1/appointments/${payload.appointmentId}`, {
+            const { data } = await api.patch(`/api/v1/appointments/${payload.appointmentId}`, {
                 status: payload.status
             }, { headers: { 'Cache-Control': 'no-cache' } })
             return data
