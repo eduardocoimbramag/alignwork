@@ -9,6 +9,7 @@ import { ConfirmarConsultaModal } from "@/components/Modals/ConfirmarConsultaMod
 import { useTenant } from "@/contexts/TenantContext";
 import { useUpdateAppointmentStatus } from "@/hooks/useAppointmentMutations";
 import { dayjs } from "@/lib/dayjs";
+import { toast } from "@/components/ui/use-toast";
 
 const RecentAppointments = () => {
   const { buscarProximosAgendamentos, atualizarStatusAgendamento } = useApp();
@@ -24,13 +25,13 @@ const RecentAppointments = () => {
     } else if (statusAtual === 'concluido') {
       atualizarStatusAgendamento(id, 'confirmado');
     } else if (statusAtual === 'pendente') {
-      setConfirmarId(id);
+      setConfirmarId(id); // abrir modal ao clicar no badge Pendente
     }
   };
 
   const getBadgeVariant = (status: string) => {
     switch (status) {
-      case 'pendente': return 'bg-brand-pink/20 text-brand-purple hover:bg-brand-pink/30';
+      case 'pendente': return 'bg-brand-pink/20 text-brand-purple hover:bg-brand-pink/30 cursor-pointer';
       case 'confirmado': return 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer';
       case 'concluido': return 'bg-brand-green/20 text-brand-green hover:bg-brand-green/30 cursor-pointer';
       case 'desmarcado': return 'bg-destructive/20 text-destructive hover:bg-destructive/30';
@@ -54,51 +55,57 @@ const RecentAppointments = () => {
             <div className="text-sm text-gray-400">As próximas consultas aparecerão aqui</div>
           </div>
         ) : (
-          proximasConsultas.map((consulta) => (
-            <div key={consulta.id} className="relative flex items-center justify-between p-3 rounded-lg border hover:bg-gray-200/80 transition-all duration-200" style={{ backgroundColor: 'rgb(252, 249, 252)' }}>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center">
-                  <User className="w-5 h-5 text-white" />
+          proximasConsultas.map((consulta) => {
+            return (
+              <div
+                key={consulta.id}
+                className={`relative flex items-center justify-between p-3 rounded-lg border hover:bg-gray-200/80 transition-all duration-200`}
+                style={{ backgroundColor: 'rgb(252, 249, 252)' }}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{consulta.cliente}</p>
+                    <p className="text-sm text-muted-foreground">{consulta.tipo}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">{consulta.cliente}</p>
-                  <p className="text-sm text-muted-foreground">{consulta.tipo}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end justify-center">
-                  <p className="font-semibold text-foreground mb-1">{consulta.horaInicio}</p>
-                  <div className="flex items-center justify-end gap-2">
-                    <Badge
-                      className={getBadgeVariant(consulta.status)}
-                      onClick={() => handleStatusChange(consulta.id, consulta.status)}
-                    >
-                      {consulta.status === 'concluido' && <CheckCircle className="w-3 h-3 mr-1" />}
-                      {consulta.status === 'confirmado' ? 'Confirmado' :
-                        consulta.status === 'concluido' ? 'Concluído' :
-                          consulta.status === 'desmarcado' ? 'Desmarcado' : 'Pendente'}
-                    </Badge>
-                    {consulta.status === 'confirmado' && (
-                      <button
-                        onClick={() => setConsultaAberta(consulta.id)}
-                        className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-end justify-center">
+                    <p className="font-semibold text-foreground mb-1">{consulta.horaInicio}</p>
+                    <div className="flex items-center justify-end gap-2">
+                      <Badge
+                        className={getBadgeVariant(consulta.status)}
+                        onClick={() => handleStatusChange(consulta.id, consulta.status)}
                       >
-                        <Play className="w-3 h-3 text-white fill-white" />
-                      </button>
-                    )}
-                    {consulta.status === 'pendente' && (
-                      <button
-                        onClick={() => setConfirmarId(consulta.id)}
-                        className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
-                      >
-                        <Hourglass className="w-3 h-3 text-white" />
-                      </button>
-                    )}
+                        {consulta.status === 'concluido' && <CheckCircle className="w-3 h-3 mr-1" />}
+                        {consulta.status === 'confirmado' ? 'Confirmado' :
+                          consulta.status === 'concluido' ? 'Concluído' :
+                            consulta.status === 'desmarcado' ? 'Desmarcado' : 'Pendente'}
+                      </Badge>
+                      {consulta.status === 'confirmado' && (
+                        <button
+                          onClick={() => setConsultaAberta(consulta.id)}
+                          className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
+                        >
+                          <Play className="w-3 h-3 text-white fill-white" />
+                        </button>
+                      )}
+                      {consulta.status === 'pendente' && (
+                        <button
+                          onClick={() => setConfirmarId(consulta.id)}
+                          className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <Hourglass className="w-3 h-3 text-white" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
 
         <TelaConsultaModal
@@ -122,8 +129,23 @@ const RecentAppointments = () => {
               isLoading={isPending}
               onConfirm={async () => {
                 try {
-                  await updateStatus({ appointmentId: confirmarId!, tenantId, status: 'confirmed' })
+                  // calcular startsAtUTC para invalidation precisa
+                  let startsAtUTC: string | undefined
+                  if (c) {
+                    const [hh, mm] = (c.horaInicio || '00:00').split(':').map(Number)
+                    const local = dayjs(c.data).tz('America/Recife').hour(hh || 0).minute(mm || 0).second(0)
+                    startsAtUTC = local.utc().toISOString()
+                  }
+                  await updateStatus({ appointmentId: confirmarId!, tenantId, status: 'confirmed', startsAtUTC })
                   atualizarStatusAgendamento(confirmarId!, 'confirmado')
+                } catch (err: any) {
+                  if (err?.status === 404) {
+                    atualizarStatusAgendamento(confirmarId!, 'confirmado')
+                    toast({ description: 'Consulta confirmada localmente. Vincule ao backend para persistir.' })
+                  } else {
+                    toast({ description: 'Falha ao confirmar consulta.' })
+                    throw err
+                  }
                 } finally {
                   setConfirmarId(null)
                 }
