@@ -10,6 +10,7 @@ import { DesmarcarAgendamentoModal } from "@/components/Modals/DesmarcarAgendame
 import { HistoricoPacientesModal } from "@/components/Modals/HistoricoPacientesModal";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
+import { useTenant } from "@/contexts/TenantContext";
 
 /**
  * PÁGINA PRINCIPAL - DASHBOARD
@@ -32,6 +33,7 @@ const Dashboard = () => {
   const [clientesInativosAberto, setClientesInativosAberto] = useState(false);
 
   const { buscarAgendamentosPorData, buscarProximosAgendamentos } = useApp();
+  const { tenantId } = useTenant();
 
   // Obter o dia da semana atual
   const hoje = new Date();
@@ -119,7 +121,7 @@ const Dashboard = () => {
             <RecentAppointments />
 
             {/* Coluna do meio: Calendário interativo */}
-            <InteractiveCalendar tenantId="default-tenant" />
+            <InteractiveCalendar tenantId={tenantId} />
 
             {/* Coluna direita: Ações rápidas */}
             <div className="space-y-6">
