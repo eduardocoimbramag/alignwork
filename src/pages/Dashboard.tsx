@@ -11,6 +11,7 @@ import { HistoricoPacientesModal } from "@/components/Modals/HistoricoPacientesM
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
 import { useTenant } from "@/contexts/TenantContext";
+import { useClientsCount } from "@/hooks/useClientsCount";
 
 /**
  * PÁGINA PRINCIPAL - DASHBOARD
@@ -32,8 +33,9 @@ const Dashboard = () => {
   const [proximasConsultasAberto, setProximasConsultasAberto] = useState(false);
   const [clientesInativosAberto, setClientesInativosAberto] = useState(false);
 
-  const { buscarAgendamentosPorData, buscarProximosAgendamentos } = useApp();
+  const { clientes, buscarAgendamentosPorData, buscarProximosAgendamentos } = useApp();
   const { tenantId } = useTenant();
+  const { data: clientsCountData } = useClientsCount(tenantId, 'active');
 
   // Obter o dia da semana atual
   const hoje = new Date();
@@ -74,8 +76,8 @@ const Dashboard = () => {
 
             <StatsCard
               title="Total de Clientes"
-              value="0"
-              description="Nenhum cliente cadastrado"
+              value={(clientsCountData?.count ?? clientes.length)}
+              description={(clientsCountData?.count ?? clientes.length) === 1 ? '1 cliente ativo' : `${(clientsCountData?.count ?? clientes.length)} clientes ativos`}
               icon={<Users className="w-5 h-5" />}
               gradient="from-brand-purple to-brand-pink"
             />

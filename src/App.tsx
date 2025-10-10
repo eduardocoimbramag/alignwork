@@ -77,6 +77,7 @@ const App = () => (
           </TooltipProvider>
         </AppProvider>
       </AuthProvider>
+    </TenantProvider>
   </QueryClientProvider>
 );
 
