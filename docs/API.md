@@ -714,6 +714,20 @@ fetch(url, {
 });
 ```
 
+### Tela “zerada” após login (dados não aparecem)
+
+**Sintoma:** Pós-login ou após recarregar a página, listas e estatísticas aparecem vazias.
+
+**Causas comuns:**
+- Falta de chamada a `GET /api/auth/me` para validar sessão e disparar bootstrap de dados.
+- `tenantId` não definido/recuperado antes de chamar endpoints de agenda.
+- URLs sem o prefixo `/api`.
+
+**Solução:**
+- Após login, chamar `/api/auth/me` e, em seguida, pré-carregar `/api/v1/appointments/mega-stats` e `/api/v1/appointments/summary` informando `tenantId` e `tz`.
+- Em reloads, repetir o processo de validação e bootstrap automaticamente.
+- Garantir `credentials: 'include'` em todas as requisições.
+
 ---
 
 **Próximas seções:** Ver [SECURITY.md](./SECURITY.md) para práticas de segurança e [RUNBOOK.md](./RUNBOOK.md) para setup e comandos.

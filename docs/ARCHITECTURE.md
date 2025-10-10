@@ -293,13 +293,14 @@ src/
 ### Hierarquia de Providers
 
 ```typescript
-QueryClientProvider    // React Query
-  └─ AuthProvider      // Autenticação
-      └─ AppProvider   // Estado da app
-          └─ TooltipProvider
-              └─ Toaster + Sonner
-                  └─ BrowserRouter
-                      └─ Routes
+QueryClientProvider            // React Query
+  └─ TenantProvider           // Tenant atual (persistência local)
+      └─ AuthProvider        // Autenticação (usa TenantContext)
+          └─ AppProvider     // Estado da app
+              └─ TooltipProvider
+                  └─ Toaster + Sonner
+                      └─ BrowserRouter
+                          └─ Routes
 ```
 
 ### Custom Hooks Principais
@@ -457,6 +458,17 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 ```
+
+### Bootstrap de Sessão (Re-hidratação de estado)
+
+Após login e a cada reload com cookies válidos:
+
+- Frontend chama `GET /api/auth/me` para confirmar sessão (cookies httpOnly são enviados automaticamente quando `credentials: 'include'`).
+- Define `tenantId` ativo via `TenantProvider` (persistido em `localStorage`).
+- Executa um bootstrap de dados iniciais pré-carregando queries críticas (ex.: `/api/v1/appointments/mega-stats` e `/api/v1/appointments/summary`) com `tenantId` e `tz`.
+- Resultado: UI evita “tela vazia”/estado “zerado” pós-login.
+
+Opcional: endpoint único de bootstrap agregando user + stats para reduzir round-trips.
 
 ### Esquema de Tabelas
 

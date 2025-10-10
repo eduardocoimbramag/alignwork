@@ -649,6 +649,33 @@ fetch(url, {
 });
 ```
 
+### Tela em branco após login / após integrar TenantProvider
+
+**Sintoma:** Aplicação em branco, sem erros aparentes.
+
+**Causa provável:** Ordem incorreta de providers. `AuthProvider` usa `TenantContext`, portanto o `TenantProvider` deve envolver o `AuthProvider`.
+
+**Solução:** Em `src/App.tsx` manter a hierarquia:
+
+```tsx
+<QueryClientProvider>
+  <TenantProvider>
+    <AuthProvider>
+      <AppProvider>
+        {...}
+      </AppProvider>
+    </AuthProvider>
+  </TenantProvider>
+</QueryClientProvider>
+```
+
+### Dados “zerados” pós-login
+
+**Verificar:**
+- Chamada a `/api/auth/me` após login e no mount inicial.
+- Prefetch de `/api/v1/appointments/mega-stats` e `/api/v1/appointments/summary` com `tenantId` e `tz`.
+- `credentials: 'include'` ativo e URLs com prefixo `/api`.
+
 ### URLs da API incorretas (404)
 
 **Problema:** Hooks retornam 404.

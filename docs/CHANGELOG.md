@@ -95,6 +95,13 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 #### Novos Arquivos de Documentação
 - **`docs/CHANGELOG.md`** - Este arquivo
 
+### 🐛 Fixes
+
+- Corrigido “reset” pós-login no frontend
+  - Adicionada rotina de bootstrap de sessão no `AuthContext` (validação com `/api/auth/me` + prefetch de stats/summary)
+  - Introduzido `TenantProvider` com persistência de `tenantId` e correção da ordem de providers
+  - Documentação atualizada: `ARCHITECTURE.md` (providers + bootstrap), `API.md` e `RUNBOOK.md` (troubleshooting)
+
 ### 🎨 Melhorias de UX
 
 - **Feedback visual imediato** ao interagir com o calendário

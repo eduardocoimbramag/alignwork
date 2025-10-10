@@ -199,9 +199,10 @@ O sistema utiliza JWT tokens armazenados em httpOnly cookies para segurança:
 1. **Registro/Login**: Usuário envia credenciais → Backend retorna tokens
 2. **Tokens**: Access token (15 min) + Refresh token (7 dias)
 3. **Cookies**: Tokens armazenados em httpOnly cookies (não acessíveis via JS)
-4. **Requisições**: Cookies enviados automaticamente em cada requisição
-5. **Refresh**: Token expirado → Refresh automático → Novos tokens
-6. **Logout**: Cookies são limpos
+4. **Requisições**: Cookies enviados automaticamente em cada requisição (credentials: 'include')
+5. **Bootstrap de sessão**: Após login e no reload, chamar `/api/auth/me` e pré-carregar dados iniciais (stats/summary) usando o `tenantId` do `TenantProvider`
+6. **Refresh**: Token expirado → Refresh automático → Novos tokens
+7. **Logout**: Cookies são limpos
 
 ---
 
