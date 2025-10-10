@@ -244,6 +244,10 @@ class UserRegister(BaseModel):
 - `POST /` - Criar agendamento
 - `PATCH /{id}` - Atualizar status
 
+##### UX e Fluxos relevantes (Dashboard > Próximas Consultas)
+- Confirmação de consulta: ao acionar no frontend (modal), envia `PATCH /api/v1/appointments/{id}` com `{ status: 'confirmed' }`, revalida queries (`dashboardSummary`, `dashboardMegaStats`, listas do calendário) e reflete otimisticamente.
+- Exibição de data ao lado do tipo: formatação adaptativa com `dayjs` (timezone `America/Recife`), mostrando “Hoje” quando a data coincide com a data atual; caso contrário, `DD-MM-YYYY`.
+
 ---
 
 ## Frontend (React + TypeScript)

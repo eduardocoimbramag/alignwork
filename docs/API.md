@@ -728,6 +728,18 @@ fetch(url, {
 - Em reloads, repetir o processo de validação e bootstrap automaticamente.
 - Garantir `credentials: 'include'` em todas as requisições.
 
+### Confirmação de consulta retorna 404
+
+**Sintoma:** Ao confirmar no modal, o PATCH responde `404 Appointment not found`.
+
+**Causas comuns:**
+- O item exibido na lista é local (AppContext) e ainda não existe no banco (id não persistido).
+- Rota sem prefixo `/api`.
+
+**Solução:**
+- Confirmar que a chamada usa `/api/v1/appointments/{id}` e que o `id` existe no backend.
+- Em fallback, a UI pode atualizar localmente para feedback imediato, mas deve sincronizar quando o item existir no servidor.
+
 ---
 
 **Próximas seções:** Ver [SECURITY.md](./SECURITY.md) para práticas de segurança e [RUNBOOK.md](./RUNBOOK.md) para setup e comandos.

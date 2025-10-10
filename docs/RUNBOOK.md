@@ -676,6 +676,21 @@ fetch(url, {
 - Prefetch de `/api/v1/appointments/mega-stats` e `/api/v1/appointments/summary` com `tenantId` e `tz`.
 - `credentials: 'include'` ativo e URLs com prefixo `/api`.
 
+### Confirmação de consulta (PATCH) com 404
+
+**Possível causa:** Item apenas no estado local (id inexistente no backend) ou rota sem `/api`.
+
+**Checklist:**
+- Verificar se `/api/v1/appointments/{id}` existe e o id é persistido.
+- Validar que o cliente HTTP usa `credentials: 'include'`.
+- Após sucesso: invalidar `dashboardSummary`, `dashboardMegaStats` e listas do calendário.
+
+### Hover/cursor em itens clicáveis
+
+**Padrão:**
+- Aplicar `cursor-pointer` apenas nos elementos com onClick (botões/ícones), não no card inteiro.
+- Manter foco visível (`focus-visible:ring-2`) para acessibilidade.
+
 ### URLs da API incorretas (404)
 
 **Problema:** Hooks retornam 404.

@@ -98,6 +98,14 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 ### 🐛 Fixes
 
 - Corrigido “reset” pós-login no frontend
+ - Fluxo de confirmação de consultas integrado (frontend)
+   - Modal de confirmação + PATCH `/api/v1/appointments/{id}` documentado
+   - Invalidação de cache (summary/mega-stats/calendário) e fallback local quando id não persistido
+   - Hover/cursor apenas em elementos clicáveis (acessibilidade mantida)
+
+### 📚 Documentação
+
+- Integradas nas docs: confirmação de consultas, hover/cursor e exibição de data em “Próximas Consultas”.
   - Adicionada rotina de bootstrap de sessão no `AuthContext` (validação com `/api/auth/me` + prefetch de stats/summary)
   - Introduzido `TenantProvider` com persistência de `tenantId` e correção da ordem de providers
   - Documentação atualizada: `ARCHITECTURE.md` (providers + bootstrap), `API.md` e `RUNBOOK.md` (troubleshooting)
