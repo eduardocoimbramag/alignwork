@@ -12,6 +12,9 @@ import { useApp } from "@/contexts/AppContext";
 import { Check, ChevronsUpDown, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useTenant } from "@/contexts/TenantContext";
+import { useCreateAppointment } from "@/hooks/useAppointmentMutations";
+import { dayjs } from "@/lib/dayjs";
 
 /**
  * MODAL DE NOVO AGENDAMENTO
@@ -28,6 +31,8 @@ interface NovoAgendamentoModalProps {
 export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalProps) => {
   const { clientes, buscarClientes, adicionarAgendamento } = useApp();
   const { toast } = useToast();
+  const { tenantId } = useTenant();
+  const { mutateAsync: createAppointment, isPending } = useCreateAppointment(tenantId);
 
   // Estados para o formulário
   const [formData, setFormData] = useState({
@@ -113,7 +118,7 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
   };
 
   // Submeter formulário
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validarFormulario()) {
@@ -126,6 +131,18 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
     }
 
     try {
+      // Montar "YYYY-MM-DD HH:mm" no fuso local para o backend
+      const dataLocal = dayjs(formData.data!).format('YYYY-MM-DD');
+      const startsAtLocal = `${dataLocal} ${formData.horaInicio}`;
+
+      await createAppointment({
+        patientId: formData.clienteId,
+        startsAtLocal,
+        durationMin: formData.duracao,
+        status: 'pending'
+      });
+
+      // Atualização local para refletir imediatamente na UI
       adicionarAgendamento({
         clienteId: formData.clienteId,
         cliente: formData.cliente,
@@ -143,10 +160,10 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
 
       limparFormulario();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Erro ao agendar",
-        description: "Tente novamente em alguns instantes",
+        description: error?.message || "Tente novamente em alguns instantes",
         variant: "destructive"
       });
     }
@@ -185,8 +202,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
               </PopoverTrigger>
               <PopoverContent className="w-full p-0">
                 <Command>
-                  <CommandInput 
-                    placeholder="Digite nome ou CPF..." 
+                  <CommandInput
+                    placeholder="Digite nome ou CPF..."
                     value={buscarCliente}
                     onValueChange={setBuscarCliente}
                   />
@@ -200,9 +217,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
                           onSelect={() => selecionarCliente(cliente)}
                         >
                           <Check
-                            className={`mr-2 h-4 w-4 ${
-                              clienteSelecionado === cliente.nome ? "opacity-100" : "opacity-0"
-                            }`}
+                            className={`mr-2 h-4 w-4 ${clienteSelecionado === cliente.nome ? "opacity-100" : "opacity-0"
+                              }`}
                           />
                           <div>
                             <div className="font-medium">{cliente.nome}</div>
@@ -221,8 +237,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
           {/* Tipo de Consulta */}
           <div className="space-y-2">
             <Label>Tipo de Consulta *</Label>
-            <Select 
-              value={formData.tipo} 
+            <Select
+              value={formData.tipo}
               onValueChange={(valor) => setFormData(prev => ({ ...prev, tipo: valor as any }))}
             >
               <SelectTrigger className={erros.tipo ? 'border-red-500' : ''}>
@@ -244,9 +260,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className={`w-full justify-start text-left font-normal ${
-                    !formData.data && "text-muted-foreground"
-                  } ${erros.data ? 'border-red-500' : ''}`}
+                  className={`w-full justify-start text-left font-normal ${!formData.data && "text-muted-foreground"
+                    } ${erros.data ? 'border-red-500' : ''}`}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {formData.data ? format(formData.data, "dd 'de' MMMM", { locale: ptBR }) : "Selecionar data"}
@@ -260,7 +275,7 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
                     setFormData(prev => ({ ...prev, data }));
                     setOpenCalendar(false);
                   }}
-                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))} // Desabilitar datas passadas
+                  disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                   initialFocus
                 />
               </PopoverContent>
@@ -284,8 +299,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
           {/* Duração */}
           <div className="space-y-2">
             <Label htmlFor="duracao">Duração (minutos) *</Label>
-            <Select 
-              value={formData.duracao.toString()} 
+            <Select
+              value={formData.duracao.toString()}
               onValueChange={(valor) => setFormData(prev => ({ ...prev, duracao: parseInt(valor) }))}
             >
               <SelectTrigger className={erros.duracao ? 'border-red-500' : ''}>
@@ -316,7 +331,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-brand-purple to-brand-pink hover:from-brand-purple/80 hover:to-brand-pink/80"
+              className="flex-1 bg-gradient-to-r from-brand-purple to-brand-pink hover:from-brand-purple/80 hover:to-brand-pink/80 disabled:opacity-50"
+              disabled={isPending}
             >
               Agendar
             </Button>
