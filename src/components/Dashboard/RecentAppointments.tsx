@@ -68,7 +68,18 @@ const RecentAppointments = () => {
                   </div>
                   <div>
                     <p className="font-medium text-foreground">{consulta.cliente}</p>
-                    <p className="text-sm text-muted-foreground">{consulta.tipo}</p>
+                    {(() => {
+                      const local = dayjs(consulta.data)
+                      const isHoje = local.isSame(dayjs(), 'day')
+                      const label = isHoje ? 'Hoje' : local.format('DD-MM-YYYY')
+                      return (
+                        <p className="text-sm text-muted-foreground whitespace-nowrap">
+                          {consulta.tipo}
+                          <span className="mx-1">•</span>
+                          <span className={isHoje ? 'font-semibold' : ''}>{label}</span>
+                        </p>
+                      )
+                    })()}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
