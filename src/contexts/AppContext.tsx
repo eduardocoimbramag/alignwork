@@ -73,7 +73,7 @@ interface AppContextType {
   buscarClientes: (termo: string) => Cliente[];
 
   // Funções para gerenciar agendamentos
-  adicionarAgendamento: (agendamento: Omit<Agendamento, 'id'>) => void;
+  adicionarAgendamento: (agendamento: Omit<Agendamento, 'id'> & { id?: string }) => void;
   atualizarStatusAgendamento: (id: string, status: Agendamento['status']) => void;
   desmarcarAgendamento: (id: string) => void;
   buscarAgendamentosPorData: (data: Date) => Agendamento[];
@@ -145,10 +145,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Função para adicionar novo agendamento
-  const adicionarAgendamento = (dadosAgendamento: Omit<Agendamento, 'id'>) => {
+  const adicionarAgendamento = (dadosAgendamento: Omit<Agendamento, 'id'> & { id?: string }) => {
     const novoAgendamento: Agendamento = {
       ...dadosAgendamento,
-      id: Date.now().toString()
+      id: dadosAgendamento.id ?? Date.now().toString()
     };
     setAgendamentos(prev => [...prev, novoAgendamento]);
   };

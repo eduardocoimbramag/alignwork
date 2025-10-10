@@ -148,7 +148,10 @@ const RecentAppointments = () => {
                     startsAtUTC = local.utc().toISOString()
                   }
                   await updateStatus({ appointmentId: confirmarId!, tenantId, status: 'confirmed', startsAtUTC })
+                  // Opcional: refletir imediatamente local
                   atualizarStatusAgendamento(confirmarId!, 'confirmado')
+                  // Force refetch imediato das stats para evitar janelas de race
+                  // (as invalidations já foram disparadas pelo hook)
                 } catch (err: any) {
                   if (err?.status === 404) {
                     atualizarStatusAgendamento(confirmarId!, 'confirmado')
