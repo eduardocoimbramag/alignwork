@@ -5,10 +5,17 @@ import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
 import { useState } from "react";
 import { TelaConsultaModal } from "@/components/Modals/TelaConsultaModal";
+import { ConfirmarConsultaModal } from "@/components/Modals/ConfirmarConsultaModal";
+import { useTenant } from "@/contexts/TenantContext";
+import { useUpdateAppointmentStatus } from "@/hooks/useAppointmentMutations";
+import { dayjs } from "@/lib/dayjs";
 
 const RecentAppointments = () => {
   const { buscarProximosAgendamentos, atualizarStatusAgendamento } = useApp();
+  const { tenantId } = useTenant();
+  const { mutateAsync: updateStatus, isPending } = useUpdateAppointmentStatus(tenantId);
   const [consultaAberta, setConsultaAberta] = useState<string | null>(null);
+  const [confirmarId, setConfirmarId] = useState<string | null>(null);
   const proximasConsultas = buscarProximosAgendamentos();
 
   const handleStatusChange = (id: string, statusAtual: string) => {
@@ -16,6 +23,8 @@ const RecentAppointments = () => {
       atualizarStatusAgendamento(id, 'concluido');
     } else if (statusAtual === 'concluido') {
       atualizarStatusAgendamento(id, 'confirmado');
+    } else if (statusAtual === 'pendente') {
+      setConfirmarId(id);
     }
   };
 
@@ -79,6 +88,7 @@ const RecentAppointments = () => {
                     )}
                     {consulta.status === 'pendente' && (
                       <button
+                        onClick={() => setConfirmarId(consulta.id)}
                         className="w-6 h-6 bg-brand-purple hover:bg-brand-purple/90 rounded-full flex items-center justify-center transition-all duration-200 shadow-md hover:shadow-lg"
                       >
                         <Hourglass className="w-3 h-3 text-white" />
@@ -96,6 +106,31 @@ const RecentAppointments = () => {
           isOpen={!!consultaAberta}
           onClose={() => setConsultaAberta(null)}
         />
+
+        {confirmarId && (() => {
+          const c = proximasConsultas.find(x => x.id === confirmarId)
+          const paciente = c?.cliente ?? 'Paciente'
+          const data = c ? dayjs(c.data).format('DD/MM/YYYY') : ''
+          const hora = c?.horaInicio ?? ''
+          return (
+            <ConfirmarConsultaModal
+              isOpen={!!confirmarId}
+              onClose={() => setConfirmarId(null)}
+              paciente={paciente}
+              data={data}
+              hora={hora}
+              isLoading={isPending}
+              onConfirm={async () => {
+                try {
+                  await updateStatus({ appointmentId: confirmarId!, tenantId, status: 'confirmed' })
+                  atualizarStatusAgendamento(confirmarId!, 'confirmado')
+                } finally {
+                  setConfirmarId(null)
+                }
+              }}
+            />
+          )
+        })()}
       </CardContent>
     </Card>
   );
