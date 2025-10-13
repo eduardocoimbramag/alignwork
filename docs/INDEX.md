@@ -16,6 +16,7 @@
 | Ver features planejadas | [ROADMAP.md](./ROADMAP.md) |
 | Entender práticas de segurança | [SECURITY.md](./SECURITY.md) |
 | Ver histórico de mudanças | [CHANGELOG.md](./CHANGELOG.md) |
+| **Ver análise de melhorias e correções** | **[MELHORIAS-E-CORRECOES.md](./MELHORIAS-E-CORRECOES.md)** |
 | Iniciar rapidamente | [README.md](./README.md) |
 
 ---
@@ -176,20 +177,48 @@
 
 ---
 
+### [MELHORIAS-E-CORRECOES.md](./MELHORIAS-E-CORRECOES.md) - 🔍 Análise de Código
+**Quando usar:** Auditar código, planejar refactorings, priorizar débito técnico
+
+**Conteúdo:**
+- 87 itens identificados e categorizados
+- Problemas críticos (P0) que precisam correção imediata
+- Vulnerabilidades de segurança
+- Problemas de performance e escalabilidade
+- Débito técnico e manutenibilidade
+- Code smells e anti-patterns
+- Correções detalhadas com exemplos de código
+- Matriz de priorização
+- Roadmap de correções (5 sprints)
+- Métricas de saúde do código
+- Plano de ação passo a passo
+
+**Para quem:**
+- Tech leads (planejar sprints de refactoring)
+- Desenvolvedores (entender problemas e correções)
+- Code reviewers (identificar padrões)
+- Arquitetos (decisões de refactoring)
+- QA (áreas de risco)
+
+---
+
 ## 🗂️ Estrutura de Documentação
 
 ```
 docs/
-├── INDEX.md                    ← Você está aqui
-├── README.md                   → Início rápido
-├── ARCHITECTURE.md             → Arquitetura técnica
-├── API.md                      → Referência API REST
-├── RUNBOOK.md                  → Setup e operação
-├── CONTRIBUTING.md             → Workflow de contribuição
-├── ROADMAP.md                  → Visão de produto
-├── SECURITY.md                 → Práticas de segurança
-├── CHANGELOG.md                → Histórico de versões
-└── _archive/                   → Documentos antigos (migrados)
+├── INDEX.md                         ← Você está aqui
+├── README.md                        → Início rápido
+├── ARCHITECTURE.md                  → Arquitetura técnica
+├── API.md                           → Referência API REST
+├── RUNBOOK.md                       → Setup e operação
+├── CONTRIBUTING.md                  → Workflow de contribuição
+├── ROADMAP.md                       → Visão de produto
+├── SECURITY.md                      → Práticas de segurança
+├── CHANGELOG.md                     → Histórico de versões
+├── MELHORIAS-E-CORRECOES.md        → Análise completa de código (NOVO)
+├── correção-card-total-clientes.md → Documentação de correção específica
+├── correção-contadores-calendario-dashboard.md → Documentação de correção específica
+└── _archive/                        → Documentos antigos (migrados)
     ├── api-reference.md
     ├── arquitetura.md
     ├── autenticacao.md
@@ -205,10 +234,10 @@ docs/
 
 ## 📊 Estatísticas da Documentação
 
-**Documentos principais:** 8  
+**Documentos principais:** 11 (8 core + 3 auxiliares)  
 **Documentos arquivados:** 9  
-**Total de páginas estimadas:** ~150  
-**Cobertura de tópicos:** 95%+
+**Total de páginas estimadas:** ~250  
+**Cobertura de tópicos:** 98%+
 
 **Tópicos cobertos:**
 - ✅ Arquitetura e design
@@ -218,6 +247,8 @@ docs/
 - ✅ Segurança
 - ✅ Roadmap de produto
 - ✅ Contribuição
+- ✅ **Análise de código e melhorias (NOVO)**
+- ✅ **Troubleshooting específico**
 - ⚠️ Testes (planejado, não implementado)
 - ⚠️ Deploy em produção (planejado)
 
