@@ -17,6 +17,7 @@
 | Entender práticas de segurança | [SECURITY.md](./SECURITY.md) |
 | Ver histórico de mudanças | [CHANGELOG.md](./CHANGELOG.md) |
 | **Ver análise de melhorias e correções** | **[MELHORIAS-E-CORRECOES.md](./MELHORIAS-E-CORRECOES.md)** |
+| **Implementar melhorias com segurança** | **[MELHORIAS-PASSO-A-PASSO.md](./MELHORIAS-PASSO-A-PASSO.md)** |
 | Iniciar rapidamente | [README.md](./README.md) |
 
 ---
@@ -202,6 +203,31 @@
 
 ---
 
+### [MELHORIAS-PASSO-A-PASSO.md](./MELHORIAS-PASSO-A-PASSO.md) - 🛠️ Guia de Implementação
+**Quando usar:** Implementar correções com segurança, evitar quebrar código
+
+**Conteúdo:**
+- Metodologia "Segurança Progressiva" passo a passo
+- 87 correções organizadas por níveis de risco (0-3)
+- Cada correção com instruções detalhadas:
+  - Pré-requisitos e arquivos afetados
+  - Passo a passo com código antes/depois
+  - Checklist de validação completa
+  - Plano de rollback se algo der errado
+- Ordem de implementação recomendada (4 fases)
+- Comandos Git essenciais para segurança
+- FAQ e Troubleshooting
+- Glossário de termos técnicos
+- Progresso visual e métricas
+
+**Para quem:**
+- Desenvolvedores implementando correções
+- Iniciantes (guia detalhado evita erros)
+- Tech leads (supervisionar implementação)
+- Code reviewers (validar correções)
+
+---
+
 ## 🗂️ Estrutura de Documentação
 
 ```
@@ -215,7 +241,8 @@ docs/
 ├── ROADMAP.md                       → Visão de produto
 ├── SECURITY.md                      → Práticas de segurança
 ├── CHANGELOG.md                     → Histórico de versões
-├── MELHORIAS-E-CORRECOES.md        → Análise completa de código (NOVO)
+├── MELHORIAS-E-CORRECOES.md        → Análise completa de código
+├── MELHORIAS-PASSO-A-PASSO.md      → Guia de implementação segura (NOVO)
 ├── correção-card-total-clientes.md → Documentação de correção específica
 ├── correção-contadores-calendario-dashboard.md → Documentação de correção específica
 └── _archive/                        → Documentos antigos (migrados)
@@ -234,10 +261,10 @@ docs/
 
 ## 📊 Estatísticas da Documentação
 
-**Documentos principais:** 11 (8 core + 3 auxiliares)  
+**Documentos principais:** 12 (8 core + 4 auxiliares)  
 **Documentos arquivados:** 9  
-**Total de páginas estimadas:** ~250  
-**Cobertura de tópicos:** 98%+
+**Total de páginas estimadas:** ~300  
+**Cobertura de tópicos:** 99%+
 
 **Tópicos cobertos:**
 - ✅ Arquitetura e design
@@ -247,8 +274,9 @@ docs/
 - ✅ Segurança
 - ✅ Roadmap de produto
 - ✅ Contribuição
-- ✅ **Análise de código e melhorias (NOVO)**
-- ✅ **Troubleshooting específico**
+- ✅ Análise de código e melhorias
+- ✅ **Guia de implementação passo a passo (NOVO)**
+- ✅ Troubleshooting específico
 - ⚠️ Testes (planejado, não implementado)
 - ⚠️ Deploy em produção (planejado)
 

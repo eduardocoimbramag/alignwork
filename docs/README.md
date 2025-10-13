@@ -16,6 +16,7 @@
 | [SECURITY.md](./SECURITY.md) 🔒 | Práticas de segurança, compliance |
 | [CHANGELOG.md](./CHANGELOG.md) 📝 | Histórico de versões e mudanças |
 | **[MELHORIAS-E-CORRECOES.md](./MELHORIAS-E-CORRECOES.md)** 🔍 | **Análise completa de código - 87 itens** |
+| **[MELHORIAS-PASSO-A-PASSO.md](./MELHORIAS-PASSO-A-PASSO.md)** 🛠️ | **Guia de implementação segura - 4 níveis de risco** |
 
 ---
 
