@@ -76,7 +76,7 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
     
     if user:
         print(f"User email: {user.email}")
-        print(f"User password hash: {user.hashed_password}")
+        # print(f"User password hash: {user.hashed_password}")  # REMOVIDO: exposição de dados sensíveis (P0-001)
         print(f"User active: {user.is_active}")
         print(f"User verified: {user.is_verified}")
         
