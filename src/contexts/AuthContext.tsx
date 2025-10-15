@@ -2,8 +2,53 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { UserPublic, LoginCredentials, RegisterData, AuthContextType } from '../types/auth';
 import { auth } from '../services/auth';
 import { useTenant } from './TenantContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { dayjs } from '@/lib/dayjs';
+
+/**
+ * Prefetch dashboard data to avoid empty screen after login.
+ * 
+ * Fetches:
+ * - MegaStats (appointments count, revenue)
+ * - Summary (daily breakdown for next 2 days)
+ * 
+ * @param queryClient - React Query client instance
+ * @param tenantId - Current tenant ID
+ * @returns Promise that resolves when prefetch completes
+ */
+const prefetchDashboardData = async (
+    queryClient: QueryClient,
+    tenantId: string
+): Promise<void> => {
+    const tz = 'America/Recife';
+    const fromISO = dayjs().tz(tz).startOf('day').toISOString();
+    const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
+
+    const { api } = await import('../services/api');
+
+    await Promise.all([
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardMegaStats', tenantId, tz],
+            queryFn: async () => {
+                const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                    params: { tenantId, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        }),
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+            queryFn: async () => {
+                const { data } = await api.get('/api/v1/appointments/summary', {
+                    params: { tenantId, from: fromISO, to: toISO, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        })
+    ]);
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -25,37 +70,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             try {
                 const userData = await auth.me();
                 setUser(userData);
-                // Se o backend expuser tenant do usuário futuramente, defina aqui
-                // Por enquanto mantém o tenant atual do contexto
-
-                // Prefetch básico para evitar telas vazias
-                const tz = 'America/Recife';
-                const fromISO = dayjs().tz(tz).startOf('day').toISOString();
-                const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
-                await Promise.all([
-                    queryClient.prefetchQuery({
-                        queryKey: ['dashboardMegaStats', tenantId, tz],
-                        queryFn: async () => {
-                            const { api } = await import('../services/api');
-                            const { data } = await api.get('/api/v1/appointments/mega-stats', {
-                                params: { tenantId, tz },
-                                headers: { 'Cache-Control': 'no-cache' }
-                            });
-                            return data;
-                        }
-                    }),
-                    queryClient.prefetchQuery({
-                        queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
-                        queryFn: async () => {
-                            const { api } = await import('../services/api');
-                            const { data } = await api.get('/api/v1/appointments/summary', {
-                                params: { tenantId, from: fromISO, to: toISO, tz },
-                                headers: { 'Cache-Control': 'no-cache' }
-                            });
-                            return data;
-                        }
-                    })
-                ]);
+                
+                // Prefetch dashboard data to avoid empty screen
+                await prefetchDashboardData(queryClient, tenantId);
             } catch (error) {
                 console.error('Auth check failed:', error);
                 setUser(null);
@@ -70,34 +87,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
         const userData = await auth.login(credentials);
         setUser(userData);
-        // Bootstrap pós-login
-        const tz = 'America/Recife';
-        const fromISO = dayjs().tz(tz).startOf('day').toISOString();
-        const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
-        await Promise.all([
-            queryClient.prefetchQuery({
-                queryKey: ['dashboardMegaStats', tenantId, tz],
-                queryFn: async () => {
-                    const { api } = await import('../services/api');
-                    const { data } = await api.get('/api/v1/appointments/mega-stats', {
-                        params: { tenantId, tz },
-                        headers: { 'Cache-Control': 'no-cache' }
-                    });
-                    return data;
-                }
-            }),
-            queryClient.prefetchQuery({
-                queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
-                queryFn: async () => {
-                    const { api } = await import('../services/api');
-                    const { data } = await api.get('/api/v1/appointments/summary', {
-                        params: { tenantId, from: fromISO, to: toISO, tz },
-                        headers: { 'Cache-Control': 'no-cache' }
-                    });
-                    return data;
-                }
-            })
-        ]);
+        
+        // Prefetch dashboard data to avoid empty screen
+        await prefetchDashboardData(queryClient, tenantId);
+        
         return userData;
     };
 
