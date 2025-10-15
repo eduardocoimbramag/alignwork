@@ -10667,62 +10667,331 @@ Arquitetura:   ██████░░░░  6/10 (sem mudança)
 <!-- CORREÇÃO #9 - INÍCIO -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
-### Correção #9: Validação de Timestamps (P0-012)
+### Correção #9 — Validação de Timestamps (P0-012)
 
-**Nível de Risco:** 🟡 BAIXO  
-**Tempo Estimado:** 15 minutos  
-**Prioridade:** P0 (Validação)  
-**Referência:** [MELHORIAS-E-CORRECOES.md#P0-012](./MELHORIAS-E-CORRECOES.md#p0-012-falta-validacao-de-entrada-em-timestamps)
+> **Modo:** DOCUMENTAÇÃO SOMENTE (não aplicar agora)  
+> **Nível de Risco:** 🟡 BAIXO  
+> **Tempo Estimado:** 15-20 minutos  
+> **Prioridade:** P0 (Validação Crítica)  
+> **Categoria:** Robustez / Validação / Segurança  
+> **Princípio Violado:** Input Validation / Fail-Fast  
+> **Referência:** [MELHORIAS-E-CORRECOES.md#P0-012](./MELHORIAS-E-CORRECOES.md#p0-012-falta-validacao-de-entrada-em-timestamps)
 
-#### Por Que Fazer?
+---
 
-- ✅ Previne crash com datas inválidas
-- ✅ Melhora mensagens de erro
-- ✅ Validação do lado do servidor
-- ✅ Apenas adiciona validações (não quebra código existente)
+## 1. Contexto e Problema
 
-#### Pré-requisitos
+### Sintomas Observados
 
-- [ ] Backend rodando
-- [ ] Entender Pydantic validators
+**1. Servidor Pode Crashar com Timestamps Inválidos**
 
-#### Arquivo Afetado
+Quando um cliente envia timestamps malformados ou inválidos ao endpoint de criação de appointments, o servidor pode crashar devido a `ValueError` não tratado.
 
-- `backend/schemas/appointment.py`
+**❌ PROBLEMA:** Crash do servidor com input inválido  
+**❌ PROBLEMA:** Dados inválidos persistidos no banco  
+**❌ PROBLEMA:** Experiência ruim do usuário (erro genérico 500)
 
-#### Passo a Passo
-
-**1. Abrir arquivo:**
-```bash
-code backend/schemas/appointment.py
+**Exemplo de Erro Típico (Logs do Backend):**
+```
+ERROR: Exception in ASGI application
+Traceback (most recent call last):
+  File "backend/routes/appointments.py", line 159
+    starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+ValueError: Invalid isoformat string: 'invalid-date'
 ```
 
-**2. Adicionar imports necessários:**
+**Resultado:** Servidor retorna HTTP 500 (Internal Server Error) ao invés de 422 (Validation Error)
+
+**2. Ausência de Validação de Regras de Negócio**
+
+Verificando `backend/schemas/appointment.py`:
 
 ```python
-# ANTES (linha 1):
-from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional
+# Exemplo (não aplicar) — Estado ATUAL (sem validação)
 
-# DEPOIS (linha 1):
-from pydantic import BaseModel, validator
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-```
-
-**3. Adicionar validators ao AppointmentCreate:**
-
-```python
-# ANTES (linhas 5-10):
 class AppointmentCreate(BaseModel):
     tenantId: str
     patientId: str
     startsAt: str  # ISO string UTC
     durationMin: int
     status: Optional[str] = "pending"
+    # ❌ NENHUM validator presente!
+    # ❌ Aceita datas no passado
+    # ❌ Aceita datas muito futuras (ano 9999)
+    # ❌ Aceita durações inválidas (1 minuto, 1000 horas)
+    # ❌ Aceita IDs vazios
+```
 
-# DEPOIS (linhas 5-45):
+**Problemas Específicos Identificados:**
+
+| Campo | Problema | Exemplo Inválido | Comportamento Atual |
+|-------|----------|------------------|---------------------|
+| `startsAt` | Formato inválido | `"invalid-date"` | ❌ Crash (ValueError) |
+| `startsAt` | Data no passado | `"2020-01-01T10:00:00Z"` | ✅ Aceito (incorreto) |
+| `startsAt` | Data muito futura | `"2999-01-01T10:00:00Z"` | ✅ Aceito (incorreto) |
+| `durationMin` | Muito curto | `5` | ✅ Aceito (incorreto) |
+| `durationMin` | Muito longo | `10000` | ✅ Aceito (incorreto) |
+| `durationMin` | Não múltiplo de 5 | `17` | ✅ Aceito (UX ruim) |
+| `tenantId` | String vazia | `""` | ✅ Aceito (incorreto) |
+| `patientId` | Muito curto | `"ab"` | ✅ Aceito (vulnerabilidade) |
+
+### Passos de Reprodução
+
+**Cenário 1: Crash com Formato Inválido**
+
+1. Iniciar backend (`uvicorn main:app --reload`)
+2. Enviar POST para `/api/v1/appointments/` com:
+   ```json
+   {
+     "tenantId": "tenant-123",
+     "patientId": "patient-456",
+     "startsAt": "not-a-date",
+     "durationMin": 60
+   }
+   ```
+3. **Resultado Atual:** HTTP 500 (servidor crash)
+4. **Resultado Esperado:** HTTP 422 com mensagem clara
+
+**Cenário 2: Data no Passado Aceita**
+
+1. Enviar POST com `"startsAt": "2020-01-01T10:00:00Z"`
+2. **Resultado Atual:** Appointment criado (incorreto)
+3. **Resultado Esperado:** HTTP 422 - "Appointment cannot be in the past"
+
+**Cenário 3: Duração Inválida Aceita**
+
+1. Enviar POST com `"durationMin": 5` (muito curto)
+2. **Resultado Atual:** Appointment criado com 5 minutos
+3. **Resultado Esperado:** HTTP 422 - "Duration must be at least 15 minutes"
+
+### Impacto
+
+**Impacto Técnico:**
+- ❌ **Crash do servidor:** ValueError não tratado derruba aplicação
+- ❌ **Dados inválidos:** Appointments impossíveis persistidos no banco
+- ❌ **Debugging difícil:** Erros genéricos 500 sem detalhes
+
+**Impacto de Negócio:**
+- ❌ **UX ruim:** Usuário recebe erro genérico ao invés de mensagem clara
+- ❌ **Integridade de dados:** Appointments inválidos poluem banco de dados
+- ❌ **Confiabilidade:** Sistema parece instável (crashes frequentes)
+
+**Impacto de Segurança:**
+- ⚠️ **DoS potencial:** Attacker pode crashar servidor repetidamente
+- ⚠️ **Injection:** IDs muito curtos ou malformados podem causar problemas
+
+---
+
+## 2. Mapa de Fluxo (Alto Nível)
+
+```
+Cliente  →  POST /appointments  →  Backend (Pydantic)  →  ❌ ValueError  →  HTTP 500
+                                        ↓
+                                   (SEM validação)
+                                        ↓
+                                  datetime.fromisoformat()
+                                        ↓
+                                   CRASH se inválido
+```
+
+**Problema:** Backend aceita qualquer input e só valida na hora de converter para datetime, causando crash.
+
+### Fluxo PROPOSTO (COM Validação Pydantic)
+
+```
+Cliente  →  POST /appointments  →  Backend (Pydantic)  →  ✅ Validators  →  HTTP 422
+                                        ↓                      ↓
+                                   (COM validação)     (se inválido)
+                                        ↓
+                                   @validator decorators
+                                        ↓
+                                   - Formato ISO?
+                                   - Não no passado?
+                                   - Não muito futuro?
+                                   - Duração válida?
+                                        ↓
+                                   ✅ Se OK → prossegue
+                                   ❌ Se ERRO → HTTP 422 com mensagem clara
+```
+
+**Solução:** Pydantic valida ANTES de processar, retornando HTTP 422 (Validation Error) com mensagem clara.
+
+---
+
+## 3. Hipóteses de Causa
+
+### Causa Raiz Confirmada
+
+**Causa:** Ausência de validators Pydantic no schema `AppointmentCreate`
+
+**Evidência 1: Código-fonte** (`backend/schemas/appointment.py`)
+```python
+class AppointmentCreate(BaseModel):
+    tenantId: str
+    patientId: str
+    startsAt: str  # ❌ Apenas tipo str, sem validators
+    durationMin: int  # ❌ Apenas tipo int, sem range check
+    status: Optional[str] = "pending"
+    # ❌ NENHUM @validator presente
+```
+
+**Evidência 2: Logs de erro**
+```
+ValueError: Invalid isoformat string: 'invalid-date'
+  at datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+```
+→ Erro acontece em `routes/appointments.py`, NÃO no schema (validação tardia)
+
+**Evidência 3: Teste manual**
+- Input inválido → crash (HTTP 500)
+- Input válido mas passado → aceito (incorreto)
+
+### Como Validar
+
+**Teste 1: Enviar timestamp inválido**
+```bash
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "test",
+    "patientId": "test",
+    "startsAt": "not-a-date",
+    "durationMin": 60
+  }'
+```
+**Resultado Esperado ANTES:** HTTP 500 (crash)  
+**Resultado Esperado DEPOIS:** HTTP 422 com mensagem clara
+
+**Teste 2: Enviar duração inválida**
+```bash
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "test",
+    "patientId": "test",
+    "startsAt": "2025-12-10T14:00:00Z",
+    "durationMin": 5
+  }'
+```
+**Resultado Esperado ANTES:** Aceito (incorreto)  
+**Resultado Esperado DEPOIS:** HTTP 422 - "Duration must be at least 15 minutes"
+
+---
+
+## 4. Objetivo (Resultado Verificável)
+
+### Critérios de "Feito"
+
+1. ✅ **Validators adicionados:** Schema `AppointmentCreate` tem @validator para `startsAt`, `durationMin`, `tenantId`, `patientId`
+2. ✅ **Imports atualizados:** `validator`, `timezone`, `timedelta` importados
+3. ✅ **Servidor não crash:** Input inválido retorna HTTP 422 (não 500)
+4. ✅ **Mensagens claras:** Erros de validação são descritivos e úteis
+5. ✅ **Backend compila:** Python não levanta erros de sintaxe
+6. ✅ **Testes manuais passam:** 7 casos de teste validados (ver seção 10)
+
+### Validação Objetiva
+
+**Teste Automatizado (Checklist):**
+
+| Teste | Input | Esperado ANTES | Esperado DEPOIS | Status |
+|-------|-------|----------------|-----------------|--------|
+| **Formato inválido** | `"startsAt": "invalid"` | HTTP 500 | HTTP 422 | 🔲 |
+| **Data passado** | `"startsAt": "2020-01-01T10:00:00Z"` | Aceito | HTTP 422 | 🔲 |
+| **Data futuro** | `"startsAt": "2999-01-01T10:00:00Z"` | Aceito | HTTP 422 | 🔲 |
+| **Duração curta** | `"durationMin": 5` | Aceito | HTTP 422 | 🔲 |
+| **Duração longa** | `"durationMin": 10000` | Aceito | HTTP 422 | 🔲 |
+| **ID vazio** | `"tenantId": ""` | Aceito | HTTP 422 | 🔲 |
+| **Data válida** | `"startsAt": "2025-12-10T14:00:00Z"` | Aceito | Aceito | 🔲 |
+
+---
+
+## 5. Escopo (IN / OUT)
+
+### IN - O Que Entra Nesta Correção
+
+✅ **Adicionar** validators Pydantic em `backend/schemas/appointment.py`
+✅ **Validar** `startsAt`: formato ISO, não passado, não muito futuro
+✅ **Validar** `durationMin`: 15-480 minutos, múltiplo de 5
+✅ **Validar** `tenantId` e `patientId`: não vazios, mínimo 3 caracteres
+✅ **Importar** `validator`, `timezone`, `timedelta`
+✅ **Testar** manualmente 7 casos (ver seção 10)
+✅ **Commit** com mensagem descritiva
+
+### OUT - O Que Fica Fora
+
+❌ **Testes automatizados** (pytest) → fica para MAINT-003
+❌ **Validação no frontend** (TypeScript) → já existe, não precisa mudar
+❌ **Mensagens i18n** (internacionalização) → fica para UX-XXX
+❌ **Validação de conflitos** (appointments sobrepostos) → fica para P0-014
+❌ **Validação de patient exists** → fica para P0-016
+❌ **Outros schemas** (`AppointmentUpdate`) → escopo limitado a `AppointmentCreate`
+
+### Tabela de Fronteira
+
+| Item | IN? | Justificativa |
+|------|-----|---------------|
+| Validar formato ISO de `startsAt` | ✅ | Previne crash (P0-012) |
+| Validar range de `startsAt` | ✅ | Regra de negócio básica |
+| Validar range de `durationMin` | ✅ | Previne appointments inválidos |
+| Validar IDs não vazios | ✅ | Segurança básica |
+| Validar formato de `status` | ❌ | Já tem default, baixa prioridade |
+| Adicionar validação cross-field | ❌ | Complexo, fica para P0-014 |
+| Adicionar testes automatizados | ❌ | Separar em MAINT-003 |
+
+---
+
+## 6. Mudanças Propostas (Alto Nível, SEM Aplicar)
+
+### Mudança #1: Atualizar Imports
+
+**Arquivo:** `backend/schemas/appointment.py`  
+**Linhas:** 1-3
+
+#### BEFORE
+```python
+# Exemplo (não aplicar) — Estado ATUAL
+
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+```
+
+#### AFTER
+```python
+# Exemplo (não aplicar) — Estado PROPOSTO
+
+from pydantic import BaseModel, validator
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+```
+
+**Impacto:**
+- Adiciona `validator` para decorators
+- Adiciona `timezone` e `timedelta` para cálculos de data
+
+---
+
+### Mudança #2: Adicionar Validators ao AppointmentCreate
+
+**Arquivo:** `backend/schemas/appointment.py`  
+**Linhas:** 5-10 (atualmente) → 5-52 (após mudança)
+
+#### BEFORE
+```python
+# Exemplo (não aplicar) — Estado ATUAL
+
+class AppointmentCreate(BaseModel):
+    tenantId: str
+    patientId: str
+    startsAt: str  # ISO string UTC
+    durationMin: int
+    status: Optional[str] = "pending"
+```
+
+#### AFTER
+```python
+# Exemplo (não aplicar) — Estado PROPOSTO
+
 class AppointmentCreate(BaseModel):
     tenantId: str
     patientId: str
@@ -10741,7 +11010,6 @@ class AppointmentCreate(BaseModel):
                 "Expected ISO 8601 format (e.g., '2025-10-10T14:00:00Z')"
             )
         
-        # Validar que não está no passado (tolerância de 5 min para timezone/latência)
         now = datetime.now(timezone.utc)
         if dt < now - timedelta(minutes=5):
             raise ValueError(
@@ -10749,8 +11017,7 @@ class AppointmentCreate(BaseModel):
                 f"Received: {dt.isoformat()}, Current: {now.isoformat()}"
             )
         
-        # Validar que não está muito no futuro (máximo 2 anos)
-        max_future = now + timedelta(days=730)  # 2 anos
+        max_future = now + timedelta(days=730)
         if dt > max_future:
             raise ValueError(
                 "Appointment cannot be more than 2 years in the future. "
@@ -10764,7 +11031,7 @@ class AppointmentCreate(BaseModel):
         """Validate appointment duration."""
         if v < 15:
             raise ValueError("Duration must be at least 15 minutes")
-        if v > 480:  # 8 horas
+        if v > 480:
             raise ValueError("Duration cannot exceed 8 hours (480 minutes)")
         if v % 5 != 0:
             raise ValueError("Duration must be multiple of 5 minutes")
@@ -10780,96 +11047,1029 @@ class AppointmentCreate(BaseModel):
         return v.strip()
 ```
 
-**4. Salvar arquivo**
+**Detalhamento dos Validators:**
 
-#### Validação
+1. **`validate_starts_at`:**
+   - Tenta converter para datetime (valida formato)
+   - Rejeita datas >5 min no passado (tolerância para latência)
+   - Rejeita datas >2 anos no futuro
+   - Retorna valor original (Pydantic requirement)
 
-**Checklist de Validação:**
+2. **`validate_duration`:**
+   - Mínimo 15 minutos (appointments curtos demais)
+   - Máximo 480 minutos (8 horas - appointments longos demais)
+   - Múltiplo de 5 (UX - facilita seleção em UI)
 
-- [ ] Backend inicia sem erros:
-  ```bash
-  cd backend
-  uvicorn main:app --reload
-  ```
+3. **`validate_ids`:**
+   - Não vazio (previne IDs acidentalmente vazios)
+   - Mínimo 3 caracteres (previne IDs muito curtos/inválidos)
+   - Strip whitespace (normalização)
 
-- [ ] **Testar criação de appointment válido:**
-  - Via Swagger UI (http://localhost:8000/docs)
-  - POST /api/v1/appointments/
-  - Body:
-    ```json
-    {
-      "tenantId": "tenant-123",
-      "patientId": "patient-456",
-      "startsAt": "2025-12-10T14:00:00Z",
-      "durationMin": 60,
-      "status": "pending"
-    }
+### Impacto em Outros Arquivos
+
+**Nenhum arquivo precisa ser modificado além de `backend/schemas/appointment.py`**
+
+| Arquivo | Precisa Mudar? | Motivo |
+|---------|----------------|--------|
+| `backend/routes/appointments.py` | ❌ NÃO | Já usa `AppointmentCreate` - validators rodam automaticamente |
+| `backend/models/appointment.py` | ❌ NÃO | Model não afetado |
+| `src/` (frontend) | ❌ NÃO | Frontend já trata erros 422 |
+
+---
+
+## 7. Alternativas Consideradas (Trade-offs)
+
+### Alternativa 1: Validators Pydantic (RECOMENDADO ✅)
+
+**Descrição:** Adicionar `@validator` decorators no schema Pydantic
+
+**Prós:**
+- ✅ Executa ANTES de processar request (fail-fast)
+- ✅ Retorna HTTP 422 automaticamente (padrão RESTful)
+- ✅ Mensagens de erro customizáveis
+- ✅ Integrado com FastAPI/Pydantic (zero config)
+- ✅ Validação declarativa (fácil ler/manter)
+- ✅ Não afeta outros arquivos
+
+**Contras:**
+- ⚠️ Adiciona ~40 linhas ao schema
+- ⚠️ Validators não são reutilizáveis entre schemas (mas ok para este caso)
+
+**Esforço:** 🟢 BAIXO (15-20 min)  
+**Risco:** 🟢 MUITO BAIXO (apenas adiciona validações)
+
+---
+
+### Alternativa 2: Validação Manual na Route
+
+**Descrição:** Adicionar try-except e if-checks em `backend/routes/appointments.py`
+
+**Prós:**
+- ✅ Controle fino sobre validação
+- ✅ Pode validar cross-field logic
+
+**Contras:**
+- ❌ Validação imperativa (não declarativa)
+- ❌ Mistura validação com lógica de negócio
+- ❌ Dificulta manutenção
+- ❌ Não segue padrão Pydantic/FastAPI
+- ❌ Precisa retornar HTTP 422 manualmente
+
+**Esforço:** 🟡 MÉDIO (30 min)  
+**Risco:** 🟡 MÉDIO (pode esquecer validações)
+
+---
+
+### Alternativa 3: Validação no Frontend Apenas
+
+**Descrição:** Confiar apenas em validação TypeScript/React no frontend
+
+**Prós:**
+- ✅ UX imediata (feedback antes de enviar)
+
+**Contras:**
+- ❌ **INSEGURO:** Frontend pode ser bypassado (curl, Postman, attacker)
+- ❌ Não previne crash do servidor
+- ❌ Viola princípio "never trust client"
+
+**Esforço:** 🟢 ZERO (já existe)  
+**Risco:** 🔴 ALTO (vulnerabilidade de segurança)
+
+---
+
+### Alternativa 4: Não Fazer Nada
+
+**Descrição:** Manter código atual sem validação
+
+**Prós:**
+- ✅ Zero esforço
+
+**Contras:**
+- ❌ Servidor continua crashando com input inválido
+- ❌ Dados inválidos no banco
+- ❌ UX ruim
+- ❌ Vulnerabilidade de segurança (DoS)
+
+**Esforço:** 🟢 ZERO  
+**Risco:** 🔴 CRÍTICO
+
+---
+
+### Matriz de Decisão
+
+| Alternativa | Esforço | Risco | Manutenibilidade | Segurança | Score |
+|-------------|---------|-------|------------------|-----------|-------|
+| **Validators Pydantic** ✅ | 🟢 Baixo | 🟢 Muito Baixo | 🟢 Alta | 🟢 Alta | **10/10** |
+| Validação Manual | 🟡 Médio | 🟡 Médio | 🟡 Média | 🟢 Alta | 6/10 |
+| Frontend Apenas | 🟢 Zero | 🔴 Alto | 🟢 Alta | 🔴 Baixa | 3/10 |
+| Não Fazer | 🟢 Zero | 🔴 Crítico | 🔴 Baixa | 🔴 Baixa | 0/10 |
+
+**Decisão:** **Alternativa 1 - Validators Pydantic** (score 10/10)
+
+**Justificativa:** Baixo esforço, risco mínimo, segurança máxima, padrão da indústria.
+
+---
+
+## 8. Riscos e Mitigações
+
+### Risco 1: Validators Muito Restritivos
+
+**Descrição:** Validators rejeitam inputs legítimos.
+
+**Probabilidade:** 🟡 Baixa (15%)  
+**Impacto:** 🟡 Médio — Usuários não conseguem criar appointments válidos  
+**Severidade:** 🟡 **MÉDIA**
+
+**Evidência de Baixo Risco:**
+- Regras baseadas em negócio real (15min mínimo, 2 anos máximo são razoáveis)
+- Tolerância de 5 min no passado (previne false positives por latência)
+
+**Mitigação:**
+1. Testar com datas/horários edge case
+2. Se necessário, ajustar constantes (15min → 10min, 2 anos → 3 anos)
+3. Monitorar erros 422 em produção (se muitos = validators muito restritivos)
+
+**Rollback:** Remover validators (git revert)
+
+---
+
+### Risco 2: Frontend Não Trata Novos Erros 422
+
+**Descrição:** Frontend quebra ao receber novos erros de validação.
+
+**Probabilidade:** 🟢 Muito Baixa (5%)  
+**Impacto:** 🟡 Médio — Usuário vê erro genérico  
+**Severidade:** 🟡 **BAIXA**
+
+**Por que Baixo Risco:**
+- Frontend já trata erros 422 (Pydantic validation)
+- Apenas adiciona NOVOS erros, não muda formato
+
+**Mitigação:**
+- ✅ Testar criação de appointment via UI após mudança
+- ✅ Verificar que mensagens de erro aparecem corretamente
+- ✅ Se necessário, melhorar tratamento de erro no frontend (mas provavelmente ok)
+
+---
+
+### Risco 3: Performance de Validators
+
+**Descrição:** Validators adicionam latência significativa.
+
+**Probabilidade:** 🟢 Muito Baixa (2%)  
+**Impacto:** 🟢 Baixo — Latência <1ms  
+**Severidade:** 🟢 **MUITO BAIXA**
+
+**Por que Baixo Risco:**
+- Validators são Python puro (rápido)
+- Operações simples (datetime.fromisoformat, comparações)
+- Executa 1 vez por request (não em loop)
+
+**Mitigação:**
+- ✅ Não precisa (risco desprezível)
+
+---
+
+### Risco 4: Timezone Confusion
+
+**Descrição:** Comparações de datetime com timezone UTC vs local.
+
+**Probabilidade:** 🟡 Baixa (10%)  
+**Impacto:** 🟡 Médio — Appointments rejeitados incorretamente  
+**Severidade:** 🟡 **MÉDIA**
+
+**Por que Baixo Risco:**
+- Validator usa `datetime.now(timezone.utc)` (sempre UTC)
+- Input deve ser ISO 8601 com Z ou +00:00 (UTC)
+- Tolerância de 5 min previne edge cases
+
+**Mitigação:**
+1. Testar com timestamps de fusos diferentes
+2. Garantir que frontend envia timestamps em UTC
+3. Se necessário, aumentar tolerância (5min → 10min)
+
+---
+
+### Tabela-Resumo de Riscos
+
+| Risco | Prob. | Impacto | Severidade | Mitigação Principal |
+|-------|-------|---------|------------|---------------------|
+| Validators restritivos | 🟡 15% | 🟡 Médio | 🟡 MÉDIA | Testar edge cases, ajustar constantes |
+| Frontend não trata 422 | 🟢 5% | 🟡 Médio | 🟡 BAIXA | Testar via UI, melhorar se necessário |
+| Performance | 🟢 2% | 🟢 Baixo | 🟢 MUITO BAIXA | Não precisa |
+| Timezone confusion | 🟡 10% | 🟡 Médio | 🟡 MÉDIA | Usar UTC, tolerância 5min |
+
+**Risco Global:** 🟢 **BAIXO** (validators são adições seguras, não mudanças de lógica)
+
+---
+
+## 9. Casos de Teste (Manuais, Passo a Passo)
+
+### Teste 1: Backend Compila Sem Erros
+
+**Objetivo:** Verificar que código Python é sintaticamente válido
+
+**Passos:**
+1. Abrir terminal
+2. Navegar para `backend/`
+3. Executar: `python -m py_compile schemas/appointment.py`
+
+**Resultado Esperado:** Nenhum output (sucesso silencioso)  
+**Critério de Sucesso:** ✅ Nenhum SyntaxError
+
+---
+
+### Teste 2: Servidor Inicia Normalmente
+
+**Objetivo:** Verificar que validators não quebram inicialização
+
+**Passos:**
+1. Terminal: `cd backend`
+2. Terminal: `uvicorn main:app --reload`
+3. Aguardar mensagem "Application startup complete"
+
+**Resultado Esperado:**
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Application startup complete.
+```
+
+**Critério de Sucesso:** ✅ Servidor inicializado sem erros
+
+---
+
+### Teste 3: POST com Timestamp Inválido (Formato)
+
+**Objetivo:** Verificar que formato inválido retorna HTTP 422
+
+**Passos:**
+1. Abrir Swagger UI: `http://localhost:8000/docs`
+2. POST `/api/v1/appointments/`
+3. Body:
+   ```json
+   {
+     "tenantId": "tenant-test",
+     "patientId": "patient-test",
+     "startsAt": "not-a-date",
+     "durationMin": 60
+   }
+   ```
+4. Clicar "Execute"
+
+**Resultado Esperado:**
+- HTTP 422 Unprocessable Entity
+- Body contém: `"Invalid datetime format"`
+
+**Critério de Sucesso:** ✅ Retorna 422 (NÃO 500)
+
+---
+
+### Teste 4: POST com Data no Passado
+
+**Objetivo:** Verificar que data passada é rejeitada
+
+**Passos:**
+1. Swagger UI → POST `/api/v1/appointments/`
+2. Body:
+   ```json
+   {
+     "tenantId": "tenant-test",
+     "patientId": "patient-test",
+     "startsAt": "2020-01-01T10:00:00Z",
+     "durationMin": 60
+   }
+   ```
+3. Clicar "Execute"
+
+**Resultado Esperado:**
+- HTTP 422
+- Body contém: `"Appointment cannot be in the past"`
+
+**Critério de Sucesso:** ✅ Rejeita data passada
+
+---
+
+### Teste 5: POST com Duração Inválida (Muito Curta)
+
+**Objetivo:** Verificar que duração <15min é rejeitada
+
+**Passos:**
+1. Swagger UI → POST `/api/v1/appointments/`
+2. Body:
+   ```json
+   {
+     "tenantId": "tenant-test",
+     "patientId": "patient-test",
+     "startsAt": "2025-12-10T14:00:00Z",
+     "durationMin": 5
+   }
+   ```
+3. Clicar "Execute"
+
+**Resultado Esperado:**
+- HTTP 422
+- Body contém: `"Duration must be at least 15 minutes"`
+
+**Critério de Sucesso:** ✅ Rejeita duração curta
+
+---
+
+### Teste 6: POST com ID Vazio
+
+**Objetivo:** Verificar que IDs vazios são rejeitados
+
+**Passos:**
+1. Swagger UI → POST `/api/v1/appointments/`
+2. Body:
+   ```json
+   {
+     "tenantId": "",
+     "patientId": "patient-test",
+     "startsAt": "2025-12-10T14:00:00Z",
+     "durationMin": 60
+   }
+   ```
+3. Clicar "Execute"
+
+**Resultado Esperado:**
+- HTTP 422
+- Body contém: `"ID cannot be empty"`
+
+**Critério de Sucesso:** ✅ Rejeita ID vazio
+
+---
+
+### Teste 7: POST com Dados Válidos (Happy Path)
+
+**Objetivo:** Verificar que appointment válido é ACEITO
+
+**Passos:**
+1. Swagger UI → POST `/api/v1/appointments/`
+2. Body:
+   ```json
+   {
+     "tenantId": "tenant-test",
+     "patientId": "patient-test",
+     "startsAt": "2025-12-10T14:00:00Z",
+     "durationMin": 60,
+     "status": "pending"
+   }
+   ```
+3. Clicar "Execute"
+
+**Resultado Esperado:**
+- HTTP 200 OK (ou 201 Created)
+- Body contém appointment criado com ID
+
+**Critério de Sucesso:** ✅ Aceita dados válidos
+
+---
+
+### Matriz de Testes
+
+| Teste # | Descrição | Input | HTTP Esperado | Mensagem Esperada | Status |
+|---------|-----------|-------|---------------|-------------------|--------|
+| 1 | Código compila | N/A | N/A | Sem erros | 🔲 |
+| 2 | Servidor inicia | N/A | N/A | "startup complete" | 🔲 |
+| 3 | Formato inválido | `"not-a-date"` | 422 | "Invalid datetime format" | 🔲 |
+| 4 | Data passado | `"2020-01-01T..."` | 422 | "cannot be in the past" | 🔲 |
+| 5 | Duração curta | `durationMin: 5` | 422 | "at least 15 minutes" | 🔲 |
+| 6 | ID vazio | `tenantId: ""` | 422 | "ID cannot be empty" | 🔲 |
+| 7 | Dados válidos | (completo) | 200/201 | Appointment criado | 🔲 |
+
+**Tempo Estimado:** 10-12 minutos para todos os 7 testes
+
+---
+
+## 10. Checklist de Implementação (Para Depois, SEM Aplicar Agora)
+
+### Fase 1: Preparação (2 min)
+
+1. ☐ Abrir `backend/schemas/appointment.py` em editor
+2. ☐ Ter terminal aberto em `backend/`
+3. ☐ Ter Swagger UI aberto (`http://localhost:8000/docs`)
+4. ☐ Backend rodando (`uvicorn main:app --reload`)
+
+---
+
+### Fase 2: Aplicar Mudanças (5 min)
+
+5. ☐ **Importar dependências (linhas 1-3):**
+   - Adicionar `, validator` após `BaseModel`
+   - Adicionar `, timezone, timedelta` após `datetime`
+
+6. ☐ **Adicionar validator de startsAt (após linha 10):**
+   - Copiar código de `@validator('startsAt')` completo
+   - Colar após field definitions
+
+7. ☐ **Adicionar validator de durationMin:**
+   - Copiar código de `@validator('durationMin')` completo
+   - Colar após validator anterior
+
+8. ☐ **Adicionar validator de IDs:**
+   - Copiar código de `@validator('tenantId', 'patientId')` completo
+   - Colar após validator anterior
+
+9. ☐ **Salvar arquivo:** `Ctrl+S` (Windows) ou `Cmd+S` (Mac)
+
+---
+
+### Fase 3: Validação Imediata (3 min)
+
+10. ☐ **Verificar sintaxe Python:**
+    ```bash
+    python -m py_compile schemas/appointment.py
     ```
-  - Deve retornar 200 OK
+    - ✅ Esperado: Nenhum output
+    - ❌ Se erro: Verificar indentação, parênteses, aspas
 
-- [ ] **Testar validações (devem FALHAR):**
+11. ☐ **Verificar servidor reload:**
+    - Terminal deve mostrar "Reloading..."
+    - Aguardar "Application startup complete"
+    - ✅ Esperado: Sem erros
+    - ❌ Se erro: Verificar logs, corrigir imports
 
-  **Teste 1: Data no passado**
-  ```json
-  {
-    "tenantId": "tenant-123",
-    "patientId": "patient-456",
-    "startsAt": "2020-01-01T14:00:00Z",
+12. ☐ **Verificar Swagger UI atualizado:**
+    - Refresh página `http://localhost:8000/docs`
+    - Verificar que endpoint `/appointments/` ainda aparece
+    - ✅ Esperado: Schema atualizado visível
+
+---
+
+### Fase 4: Testes Funcionais (7-10 min)
+
+13. ☐ **Executar Teste 3:** POST timestamp inválido → HTTP 422
+14. ☐ **Executar Teste 4:** POST data passado → HTTP 422
+15. ☐ **Executar Teste 5:** POST duração inválida → HTTP 422
+16. ☐ **Executar Teste 6:** POST ID vazio → HTTP 422
+17. ☐ **Executar Teste 7:** POST dados válidos → HTTP 200/201
+
+**Todos passaram?**
+- ✅ SIM → Prosseguir para Fase 5
+- ❌ NÃO → Debugar, verificar código, consultar seção 12 (Assunções)
+
+---
+
+### Fase 5: Commit (2 min)
+
+18. ☐ **Adicionar arquivo ao staging:**
+    ```bash
+    git add backend/schemas/appointment.py
+    ```
+
+19. ☐ **Fazer commit:**
+    ```bash
+    git commit -m "feat: add input validation for appointments (P0-012)
+
+    - Added validators for startsAt (date range checks)
+    - Added validators for durationMin (15min-8h, multiples of 5)
+    - Added validators for IDs (not empty, min length)
+    - Improves error messages for invalid input
+    - Risk Level: LOW (only adds validations)
+    - Ref: docs/MELHORIAS-E-CORRECOES.md#P0-012"
+    ```
+
+20. ☐ **Verificar commit:**
+    ```bash
+    git log --oneline -1
+    git show --stat
+    ```
+
+---
+
+### Fase 6: Post-Commit (2 min)
+
+21. ☐ **Testar frontend (se disponível):**
+    - Criar appointment via UI
+    - Tentar criar com data inválida
+    - Verificar que mensagens de erro aparecem
+
+22. ☐ **Atualizar VERIFICACAO.md (opcional):**
+    - Adicionar Correção #9 quando implementar batch #7-10
+
+---
+
+### Fase 7: Cleanup (1 min)
+
+23. ☐ **Fechar abas/arquivos:**
+    - Fechar `backend/schemas/appointment.py`
+    - Fechar Swagger UI
+    - Manter backend rodando (para próxima correção)
+
+24. ☐ **Celebrar! 🎉**
+    - ✅ Correção #9 completa
+    - ✅ Servidor mais robusto
+    - ✅ UX melhorada
+
+---
+
+**Tempo Total Estimado:** 15-20 minutos
+
+---
+
+## 11. Assunções e Pontos Ambíguos
+
+### Assunções Confirmadas
+
+1. ✅ **Arquivo existe:** `backend/schemas/appointment.py` está presente (confirmado)
+2. ✅ **Pydantic instalado:** FastAPI já depende de Pydantic (confirmado)
+3. ✅ **Frontend trata 422:** UI já espera erros de validação (confirmado)
+4. ✅ **Formato ISO 8601:** Frontend envia timestamps como `"YYYY-MM-DDTHH:MM:SSZ"` (confirmado)
+5. ✅ **Timezone UTC:** Todos timestamps são UTC (confirmado - `timezone.utc`)
+
+---
+
+### Pontos Ambíguos (Resolvidos)
+
+#### Ambiguidade 1: Tolerância de Data Passada
+
+**Questão:** Quantos minutos de tolerância para data passada?
+
+**Opções:**
+- A) 0 minutos (rejeita qualquer data passada)
+- B) 5 minutos (tolerância para latência/timezone)
+- C) 30 minutos (tolerância maior)
+
+**Decisão:** **B) 5 minutos** ✅
+- **Justificativa:** Previne false positives por latência de rede + clock skew
+- **Código:** `if dt < now - timedelta(minutes=5)`
+
+---
+
+#### Ambiguidade 2: Data Máxima Futuro
+
+**Questão:** Quantos anos no futuro permitir?
+
+**Opções:**
+- A) 1 ano
+- B) 2 anos
+- C) 5 anos
+
+**Decisão:** **B) 2 anos (730 dias)** ✅
+- **Justificativa:** Appointments médicos raramente >1 ano; 2 anos dá margem
+- **Código:** `max_future = now + timedelta(days=730)`
+
+---
+
+#### Ambiguidade 3: Duração Mínima
+
+**Questão:** Qual duração mínima razoável?
+
+**Opções:**
+- A) 10 minutos
+- B) 15 minutos
+- C) 30 minutos
+
+**Decisão:** **B) 15 minutos** ✅
+- **Justificativa:** Appointments muito curtos (<15min) são raros em contexto médico
+- **Código:** `if v < 15`
+
+---
+
+#### Ambiguidade 4: Duração Máxima
+
+**Questão:** Qual duração máxima razoável?
+
+**Opções:**
+- A) 4 horas (240 min)
+- B) 8 horas (480 min)
+- C) Sem limite
+
+**Decisão:** **B) 8 horas (480 min)** ✅
+- **Justificativa:** Appointments >8h são raros (procedimentos longos); previne erros
+- **Código:** `if v > 480`
+
+---
+
+#### Ambiguidade 5: Validar Múltiplo de 5?
+
+**Questão:** Forçar duração ser múltiplo de 5 minutos?
+
+**Opções:**
+- A) Sim (ex: 30, 35, 40 OK; 33 rejeitado)
+- B) Não (permitir qualquer duração)
+
+**Decisão:** **A) Sim (múltiplo de 5)** ✅
+- **Justificativa:** UX - seletores de tempo geralmente incrementam de 5 em 5
+- **Código:** `if v % 5 != 0`
+
+---
+
+### Assunções Técnicas
+
+#### Ambiente
+- Python 3.9+
+- FastAPI 0.104+
+- Pydantic 2.x
+- Uvicorn como servidor ASGI
+
+#### Dependências
+- `pydantic` → Já instalado (FastAPI dependency)
+- `datetime`, `timezone`, `timedelta` → Python stdlib (sempre disponível)
+
+#### Convenções de Código
+- Validators usam `cls` (class method)
+- Validators retornam valor original (Pydantic requirement)
+- Mensagens de erro em inglês (padrão)
+- Docstrings em validators (boa prática)
+
+---
+
+### Pontos Ambíguos Pendentes (FORA DO ESCOPO)
+
+1. **Mensagens i18n:** Erros em português? → Fica para UX-XXX
+2. **Validação de conflitos:** Appointments sobrepostos? → Fica para P0-014
+3. **Validação cross-tenant:** Verificar patient pertence a tenant? → Fica para P0-016
+4. **Testes automatizados:** pytest para validators? → Fica para MAINT-003
+5. **Logging de validação:** Log quando validação falha? → Fica para MAINT-001
+
+---
+
+## 12. Apêndice: Exemplos (NÃO Aplicar)
+
+### Exemplo 1: Código Completo Final
+
+```python
+# Exemplo (não aplicar) — backend/schemas/appointment.py COMPLETO
+
+from pydantic import BaseModel, validator
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+class AppointmentCreate(BaseModel):
+    tenantId: str
+    patientId: str
+    startsAt: str  # ISO string UTC
+    durationMin: int
+    status: Optional[str] = "pending"
+    
+    @validator('startsAt')
+    def validate_starts_at(cls, v):
+        """Validate appointment datetime."""
+        try:
+            dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except (ValueError, AttributeError) as e:
+            raise ValueError(
+                f"Invalid datetime format: {v}. "
+                "Expected ISO 8601 format (e.g., '2025-10-10T14:00:00Z')"
+            )
+        
+        now = datetime.now(timezone.utc)
+        if dt < now - timedelta(minutes=5):
+            raise ValueError(
+                "Appointment cannot be in the past. "
+                f"Received: {dt.isoformat()}, Current: {now.isoformat()}"
+            )
+        
+        max_future = now + timedelta(days=730)
+        if dt > max_future:
+            raise ValueError(
+                "Appointment cannot be more than 2 years in the future. "
+                f"Maximum allowed: {max_future.date()}"
+            )
+        
+        return v
+    
+    @validator('durationMin')
+    def validate_duration(cls, v):
+        """Validate appointment duration."""
+        if v < 15:
+            raise ValueError("Duration must be at least 15 minutes")
+        if v > 480:
+            raise ValueError("Duration cannot exceed 8 hours (480 minutes)")
+        if v % 5 != 0:
+            raise ValueError("Duration must be multiple of 5 minutes")
+        return v
+    
+    @validator('tenantId', 'patientId')
+    def validate_ids(cls, v):
+        """Validate that IDs are not empty."""
+        if not v or not v.strip():
+            raise ValueError("ID cannot be empty")
+        if len(v) < 3:
+            raise ValueError("ID must be at least 3 characters")
+        return v.strip()
+
+class AppointmentUpdate(BaseModel):
+    status: str  # pending, confirmed, cancelled
+
+class AppointmentResponse(BaseModel):
+    id: int
+    tenant_id: str
+    patient_id: str
+    starts_at: datetime
+    duration_min: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+```
+
+---
+
+### Exemplo 2: Diff Esperado
+
+```diff
+# Exemplo (não aplicar) — Git Diff Esperado
+
+diff --git a/backend/schemas/appointment.py b/backend/schemas/appointment.py
+index 1234567..89abcdef 100644
+--- a/backend/schemas/appointment.py
++++ b/backend/schemas/appointment.py
+@@ -1,8 +1,9 @@
+-from pydantic import BaseModel
+-from datetime import datetime
++from pydantic import BaseModel, validator
++from datetime import datetime, timezone, timedelta
+ from typing import Optional
+ 
+ class AppointmentCreate(BaseModel):
+     tenantId: str
+     patientId: str
+     startsAt: str  # ISO string UTC
+     durationMin: int
+     status: Optional[str] = "pending"
++    
++    @validator('startsAt')
++    def validate_starts_at(cls, v):
++        """Validate appointment datetime."""
++        try:
++            dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
++        except (ValueError, AttributeError) as e:
++            raise ValueError(
++                f"Invalid datetime format: {v}. "
++                "Expected ISO 8601 format (e.g., '2025-10-10T14:00:00Z')"
++            )
++        
++        now = datetime.now(timezone.utc)
++        if dt < now - timedelta(minutes=5):
++            raise ValueError(
++                "Appointment cannot be in the past. "
++                f"Received: {dt.isoformat()}, Current: {now.isoformat()}"
++            )
++        
++        max_future = now + timedelta(days=730)
++        if dt > max_future:
++            raise ValueError(
++                "Appointment cannot be more than 2 years in the future. "
++                f"Maximum allowed: {max_future.date()}"
++            )
++        
++        return v
++    
++    @validator('durationMin')
++    def validate_duration(cls, v):
++        """Validate appointment duration."""
++        if v < 15:
++            raise ValueError("Duration must be at least 15 minutes")
++        if v > 480:
++            raise ValueError("Duration cannot exceed 8 hours (480 minutes)")
++        if v % 5 != 0:
++            raise ValueError("Duration must be multiple of 5 minutes")
++        return v
++    
++    @validator('tenantId', 'patientId')
++    def validate_ids(cls, v):
++        """Validate that IDs are not empty."""
++        if not v or not v.strip():
++            raise ValueError("ID cannot be empty")
++        if len(v) < 3:
++            raise ValueError("ID must be at least 3 characters")
++        return v.strip()
+```
+
+---
+
+### Exemplo 3: Resposta de Erro HTTP 422
+
+```json
+// Exemplo (não aplicar) — Response body quando validação falha
+
+{
+  "detail": [
+    {
+      "loc": ["body", "startsAt"],
+      "msg": "Value error, Invalid datetime format: not-a-date. Expected ISO 8601 format (e.g., '2025-10-10T14:00:00Z')",
+      "type": "value_error"
+    }
+  ]
+}
+```
+
+---
+
+### Exemplo 4: cURL para Testes
+
+```bash
+# Exemplo (não aplicar) — cURL tests
+
+# Teste 1: Formato inválido
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "test",
+    "patientId": "test",
+    "startsAt": "invalid",
     "durationMin": 60
-  }
-  ```
-  Deve retornar 422 com erro: "Appointment cannot be in the past"
+  }'
+# Esperado: HTTP 422
 
-  **Teste 2: Duração inválida**
-  ```json
-  {
+# Teste 2: Data passado
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "test",
+    "patientId": "test",
+    "startsAt": "2020-01-01T10:00:00Z",
+    "durationMin": 60
+  }'
+# Esperado: HTTP 422
+
+# Teste 3: Duração curta
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "test",
+    "patientId": "test",
+    "startsAt": "2025-12-10T14:00:00Z",
+    "durationMin": 5
+  }'
+# Esperado: HTTP 422
+
+# Teste 4: Dados válidos
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
     "tenantId": "tenant-123",
     "patientId": "patient-456",
     "startsAt": "2025-12-10T14:00:00Z",
-    "durationMin": 5
-  }
-  ```
-  Deve retornar 422 com erro: "Duration must be at least 15 minutes"
-
-  **Teste 3: Formato inválido**
-  ```json
-  {
-    "tenantId": "tenant-123",
-    "patientId": "patient-456",
-    "startsAt": "invalid-date",
     "durationMin": 60
-  }
-  ```
-  Deve retornar 422 com erro sobre formato
-
-- [ ] **Frontend ainda funciona:**
-  - Criar appointment via UI
-  - Deve funcionar normalmente (se data/hora válidas)
-
-#### Commit
-
-```bash
-git add backend/schemas/appointment.py
-git commit -m "feat: add input validation for appointments (P0-012)
-
-- Added validators for startsAt (date range checks)
-- Added validators for durationMin (15min-8h, multiples of 5)
-- Added validators for IDs (not empty, min length)
-- Improves error messages for invalid input
-- Risk Level: LOW (only adds validations)
-- Ref: docs/MELHORIAS-E-CORRECOES.md#P0-012"
+  }'
+# Esperado: HTTP 200/201
 ```
 
-#### Notas Importantes
+---
 
-💡 **Por que isso é seguro?**
-- Apenas adiciona validações
-- Código válido existente continua funcionando
-- Código inválido agora retorna erros claros (antes crashava)
+### Exemplo 5: Pydantic Validator Pattern
 
-⚠️ **Cuidado:**
-- Frontend pode precisar tratar os novos erros 422
-- Mas já deve estar tratando, então ok
+```python
+# Exemplo (não aplicar) — Pattern geral de Pydantic validator
+
+from pydantic import BaseModel, validator
+
+class MyModel(BaseModel):
+    field: str
+    
+    @validator('field')
+    def validate_field(cls, v):
+        """Valida field."""
+        # 1. Tentar converter/processar
+        try:
+            processed = some_function(v)
+        except SomeError as e:
+            raise ValueError(f"Mensagem de erro clara: {v}")
+        
+        # 2. Validar regras de negócio
+        if not is_valid(processed):
+            raise ValueError("Mensagem descrevendo problema")
+        
+        # 3. Retornar valor (original ou processado)
+        return v  # ou processed
+```
+
+---
+
+### Exemplo 6: Python datetime.fromisoformat()
+
+```python
+# Exemplo (não aplicar) — Como datetime.fromisoformat() funciona
+
+from datetime import datetime
+
+# ✅ Formatos aceitos:
+datetime.fromisoformat("2025-10-10T14:00:00+00:00")  # OK
+datetime.fromisoformat("2025-10-10T14:00:00Z".replace('Z', '+00:00'))  # OK (com replace)
+datetime.fromisoformat("2025-10-10 14:00:00")  # OK (espaço)
+
+# ❌ Formatos rejeitados (ValueError):
+datetime.fromisoformat("invalid")  # ValueError
+datetime.fromisoformat("10/10/2025")  # ValueError (formato US)
+datetime.fromisoformat("2025-10-10")  # OK mas sem hora
+```
+
+---
+
+### Exemplo 7: Pydantic Docs Reference
+
+```markdown
+# Exemplo (não aplicar) — Referências oficiais
+
+Pydantic Validators:
+https://docs.pydantic.dev/latest/concepts/validators/
+
+FastAPI Request Validation:
+https://fastapi.tiangolo.com/tutorial/body-fields/
+
+Python datetime:
+https://docs.python.org/3/library/datetime.html
+
+ISO 8601:
+https://en.wikipedia.org/wiki/ISO_8601
+```
+
+---
+
+### Exemplo 8: Manual QA Checklist
+
+```markdown
+# Exemplo (não aplicar) — Checklist de QA manual
+
+## Pre-Deploy Checklist
+
+- [ ] Código compila (python -m py_compile)
+- [ ] Servidor inicia sem erros
+- [ ] Swagger UI carrega
+- [ ] POST válido retorna 200/201
+- [ ] POST inválido retorna 422 (não 500)
+- [ ] Mensagens de erro são claras
+- [ ] Frontend ainda funciona
+- [ ] Testes passam (pytest, se houver)
+- [ ] Commit feito com mensagem descritiva
+- [ ] Branch está limpo (git status)
+
+## Post-Deploy Checklist
+
+- [ ] Monitorar logs por 1h
+- [ ] Verificar taxa de erros 422 (se alta, validators muito restritivos)
+- [ ] Verificar que não há mais erros 500 por timestamps inválidos
+- [ ] Coletar feedback de usuários
+```
+
+---
+
+### Exemplo 9: Constantes Ajustáveis
+
+```python
+# Exemplo (não aplicar) — Como extrair para constantes (se necessário)
+
+from datetime import timedelta
+
+# Constantes de validação (facilita ajustes futuros)
+PAST_TOLERANCE_MINUTES = 5  # Tolerância para datas passadas
+MAX_FUTURE_DAYS = 730  # 2 anos
+MIN_DURATION_MINUTES = 15
+MAX_DURATION_MINUTES = 480  # 8 horas
+DURATION_INCREMENT = 5  # Múltiplo de 5
+MIN_ID_LENGTH = 3
+
+@validator('startsAt')
+def validate_starts_at(cls, v):
+    # ... código ...
+    if dt < now - timedelta(minutes=PAST_TOLERANCE_MINUTES):
+        # ...
+    max_future = now + timedelta(days=MAX_FUTURE_DAYS)
+    # ...
+
+@validator('durationMin')
+def validate_duration(cls, v):
+    if v < MIN_DURATION_MINUTES:
+        # ...
+    if v > MAX_DURATION_MINUTES:
+        # ...
+    if v % DURATION_INCREMENT != 0:
+        # ...
+```
+
+---
+
+### Exemplo 10: grep para Validar Mudanças
+
+```bash
+# Exemplo (não aplicar) — Comandos grep para validação
+
+# Verificar que imports foram adicionados
+grep -n "from pydantic import.*validator" backend/schemas/appointment.py
+# Esperado: linha 1
+
+grep -n "timezone.*timedelta" backend/schemas/appointment.py
+# Esperado: linha 2
+
+# Verificar que validators foram adicionados
+grep -n "@validator" backend/schemas/appointment.py
+# Esperado: 3 linhas (startsAt, durationMin, IDs)
+
+# Verificar que docstrings estão presentes
+grep -n '"""Validate' backend/schemas/appointment.py
+# Esperado: 3 linhas
+
+# Contar linhas do arquivo (deve ter ~50 linhas após mudanças)
+wc -l backend/schemas/appointment.py
+# Esperado: ~50-55 linhas
+```
+
+---
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- CORREÇÃO #9 - FIM -->
