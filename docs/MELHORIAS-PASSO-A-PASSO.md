@@ -4711,158 +4711,2005 @@ Neste nível faremos:
 <!-- CORREÇÃO #6 - INÍCIO -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
-### Correção #6: Corrigir ApiError Duplicado (P0-013)
+### Correção #6 — Corrigir ApiError Duplicado (P0-013)
 
 **Nível de Risco:** 🟡 BAIXO  
 **Tempo Estimado:** 3 minutos  
-**Prioridade:** P0 (Bug TypeScript)  
+**Prioridade:** P0 (Bug TypeScript - Conflito de Nomenclatura)  
+**Categoria:** TypeScript / Code Quality / DX (Developer Experience)  
 **Referência:** [MELHORIAS-E-CORRECOES.md#P0-013](./MELHORIAS-E-CORRECOES.md#p0-013-conflito-de-dupla-definicao-de-apierror)
 
-#### Por Que Fazer?
+---
 
-- ✅ Corrige conflito de nomenclatura
-- ✅ TypeScript mais consistente
-- ✅ IntelliSense funciona melhor
-- ✅ Mudança simples
+## 1️⃣ Contexto e Problema
 
-#### Pré-requisitos
+### 🔍 Sintomas Observáveis
 
-- [ ] Correções Nível 0 concluídas
-- [ ] Frontend rodando
+**Em ambiente de desenvolvimento:**
 
-#### Arquivo Afetado
+1. **IntelliSense confuso:**
+   - Ao importar `ApiError`, IDE mostra duas definições
+   - Autocomplete sugere tanto interface quanto classe
+   - "Go to Definition" (F12) pode ir para lugar errado
 
-- `src/services/api.ts` (linhas 10-26)
+2. **Warnings do TypeScript (potenciais):**
+   - Dependendo da configuração do `tsconfig.json`, pode gerar warning sobre "duplicate identifier"
+   - Em modo estrito (`strict: true`), pode causar ambiguidade
 
-#### Problema Atual
+3. **Comportamento imprevisível:**
+   - Em catch blocks: `catch (error: ApiError)` - qual tipo é usado?
+   - Em type guards: `error instanceof ApiError` - funciona, mas tipo pode estar errado
+
+**Evidências visuais:**
 
 ```typescript
-// src/services/api.ts:10-26
-export interface ApiError {  // Interface (linha 10)
-    message: string;
-    status: number;
-    detail?: string;
+// Exemplo (não aplicar) — VSCode mostrando duas definições
+import { ApiError } from '@/services/api'
+//      ^^^^^^^^
+//      (interface) ApiError  ← Definição 1 (linha 10)
+//      (class) ApiError     ← Definição 2 (linha 16)
+```
+
+### 📍 Passos de Reprodução
+
+**Reprodução 1: IntelliSense confuso**
+
+1. Abrir VSCode
+2. Criar novo arquivo: `src/test-apierror.ts`
+3. Digitar: `import { Api` e aguardar autocomplete
+4. Selecionar `ApiError`
+5. Hover sobre `ApiError` importado
+6. **Observar:** VSCode mostra duas definições diferentes
+
+**Reprodução 2: Tipo não inferido corretamente**
+
+```typescript
+// Exemplo (não aplicar) — Arquivo de teste
+import { ApiError } from '@/services/api'
+
+// Tentar usar como tipo em anotação:
+function handleError(error: ApiError) {
+  // TypeScript pode não reconhecer 'message' (propriedade de Error)
+  // Porque está usando interface, não a classe que extends Error
+  console.log(error.message)  // ← Pode gerar erro dependendo de qual tipo foi resolvido
 }
 
-class ApiError extends Error {  // Class (linha 16) ❌ CONFLITO!
-    status: number;
-    detail?: string;
-
-    constructor(message: string, status: number, detail?: string) {
-        super(message);
-        this.name = 'ApiError';
-        this.status = status;
-        this.detail = detail;
-    }
+// Tentar usar instanceof:
+try {
+  throw new ApiError('Test', 500)
+} catch (e) {
+  if (e instanceof ApiError) {  // ← Funciona
+    console.log(e.status)       // ← Pode não ter autocomplete correto
+  }
 }
 ```
 
-**Problema:**
-- Interface e classe com mesmo nome
-- Interface é sobrescrita pela classe
-- Pode causar comportamento inconsistente
+**Reprodução 3: Build warnings (em alguns setups)**
 
-#### Passo a Passo
-
-**1. Abrir arquivo:**
 ```bash
-code src/services/api.ts
+# Terminal
+npm run build
+
+# Possível warning (dependendo de tsconfig):
+# ⚠ src/services/api.ts(16,7): 
+#   Duplicate identifier 'ApiError'. 
+#   An interface and a class cannot have the same name.
 ```
 
-**2. Decisão: Qual abordagem?**
+### 💥 Impacto
 
-**Opção A: Remover interface (RECOMENDADO - mais simples)**
-**Opção B: Renomear interface para IApiError**
+**Severidade:** 🟡 BAIXA (não quebra funcionalidade, mas afeta DX)
 
-Vamos com Opção A:
+**Usuários Afetados:**
+- ✅ Desenvolvedores (100%) - IntelliSense confuso, Go to Definition errado
+- ❌ Usuários finais (0%) - nenhum impacto visível
 
-**3. Aplicar correção:**
+**Consequências:**
+
+1. **Developer Experience degradada:**
+   - Tempo perdido navegando para definição errada
+   - Autocomplete pode sugerir propriedades que não existem
+   - Debugging mais difícil (qual tipo está sendo usado?)
+
+2. **Risco de bugs futuros:**
+   - Desenvolvedor pode assumir que tipo é interface (sem `message`)
+   - Pode esquecer que `ApiError` é throwable (classe extends Error)
+   - Type guards podem não funcionar como esperado
+
+3. **Violação de convenções TypeScript:**
+   - TypeScript Best Practices: "Evite declarar interface e classe com mesmo nome"
+   - Pode quebrar em futuras versões do TypeScript (mais estritas)
+
+**Frequência:**
+- Ocorre toda vez que desenvolvedor importa `ApiError`
+- ~10-20 vezes por sessão de desenvolvimento
+- Acumula frustração ao longo do tempo
+
+---
+
+## 2️⃣ Mapa de Fluxo (Alto Nível)
+
+### 🔴 Fluxo ATUAL (COM Duplicação)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ src/services/api.ts                                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│ Linha 10: export interface ApiError {  ← INTERFACE          │
+│             message: string                                 │
+│             status: number                                  │
+│             detail?: string                                 │
+│           }                                                 │
+│                                                             │
+│ Linha 16: class ApiError extends Error {  ← CLASSE          │
+│             status: number                                  │
+│             detail?: string                                 │
+│             constructor(...) { ... }                        │
+│           }                                                 │
+│                                                             │
+│ ❌ PROBLEMA: Dois símbolos "ApiError" no mesmo escopo       │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+        ┌─────────────────┴──────────────────┐
+        │                                    │
+        ▼                                    ▼
+┌──────────────────┐             ┌──────────────────────┐
+│ Outros arquivos  │             │ TypeScript Compiler  │
+│ importam ApiError│             │ fica confuso         │
+└──────────────────┘             └──────────────────────┘
+        │                                    │
+        ▼                                    ▼
+┌─────────────────────────────┐   ┌────────────────────┐
+│ IntelliSense mostra 2 tipos │   │ Pode gerar warning │
+│ Go to Def vai pra lugar     │   │ ou erro em strict  │
+│ errado (interface)          │   │ mode               │
+└─────────────────────────────┘   └────────────────────┘
+```
+
+### ✅ Fluxo PROPOSTO (SEM Duplicação)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ src/services/api.ts                                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│ [Linha 10-14 removidas] ← Interface deletada                │
+│                                                             │
+│ Linha 10: export class ApiError extends Error {  ← APENAS CLASSE │
+│             status: number                                  │
+│             detail?: string                                 │
+│             constructor(...) { ... }                        │
+│           }                                                 │
+│                                                             │
+│ ✅ SOLUÇÃO: Apenas um símbolo "ApiError"                    │
+│    → Pode ser usado como TIPO e VALOR                      │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+        ┌─────────────────┴──────────────────┐
+        │                                    │
+        ▼                                    ▼
+┌──────────────────┐             ┌──────────────────────┐
+│ Outros arquivos  │             │ TypeScript Compiler  │
+│ importam ApiError│             │ resolve corretamente │
+└──────────────────┘             └──────────────────────┘
+        │                                    │
+        ▼                                    ▼
+┌─────────────────────────────┐   ┌────────────────────┐
+│ IntelliSense funciona       │   │ Zero warnings      │
+│ perfeitamente               │   │ Build limpo        │
+│ Go to Def correto           │   │                    │
+└─────────────────────────────┘   └────────────────────┘
+```
+
+**Diferença-chave:**
+- **ANTES:** Interface (tipo) + Classe (tipo+valor) = Ambiguidade
+- **DEPOIS:** Apenas Classe (tipo+valor) = Clareza
+
+**Por que classe pode ser tipo?**
 
 ```typescript
-// ANTES (linhas 10-26):
-export interface ApiError {  // ❌ Remover interface
-    message: string;
-    status: number;
-    detail?: string;
-}
+// Exemplo (não aplicar) — Classes em TypeScript são tipos estruturais
 
 class ApiError extends Error {
-    status: number;
-    detail?: string;
-
-    constructor(message: string, status: number, detail?: string) {
-        super(message);
-        this.name = 'ApiError';
-        this.status = status;
-        this.detail = detail;
-    }
+  status: number;
+  detail?: string;
+  constructor(message: string, status: number, detail?: string) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
 }
 
-// DEPOIS (linhas 10-20):
-class ApiError extends Error {  // ✅ Apenas a classe
-    status: number;
-    detail?: string;
-
-    constructor(message: string, status: number, detail?: string) {
-        super(message);
-        this.name = 'ApiError';
-        this.status = status;
-        this.detail = detail;
-    }
+// Pode ser usada como TIPO (como se fosse interface):
+function handleError(error: ApiError) {  // ← Tipo
+  console.log(error.status)
 }
 
-export { ApiError };  // ✅ Export explícito
+// Pode ser usada como VALOR (construtor):
+const err = new ApiError('Not Found', 404)  // ← Valor
+
+// Pode ser usada em instanceof (runtime):
+if (error instanceof ApiError) {  // ← Runtime check
+  // ...
+}
 ```
 
-**4. Verificar se interface era usada em outros lugares:**
+---
+
+## 3️⃣ Hipóteses de Causa
+
+### 🔬 Causa Raiz Identificada
+
+**Hipótese confirmada:** Desenvolvedor original criou interface primeiro, depois criou classe e esqueceu de remover interface.
+
+**Evidências:**
+
+1. **Git history (investigação):**
+   ```bash
+   # Exemplo (não aplicar) — Investigar histórico
+   git log --oneline --all -- src/services/api.ts
+   git show <commit-hash>:src/services/api.ts
+   ```
+   
+   **Provável cenário:**
+   - Commit 1: Criou `interface ApiError` (design inicial)
+   - Commit 2: Criou `class ApiError extends Error` (melhor solução)
+   - **Esquecimento:** Não removeu interface antiga
+
+2. **Pattern comum em migrações:**
+   - Começar com interface (simples)
+   - Evoluir para classe quando precisa herdar `Error`
+   - Esquecer de limpar código antigo
+
+3. **Evidência no código:**
+   ```typescript
+   // Exemplo (não aplicar) — Interface não está sendo usada
+   
+   // Interface define:
+   export interface ApiError {
+     message: string  // ← Redundante (já vem de Error)
+     status: number
+     detail?: string
+   }
+   
+   // Classe define:
+   class ApiError extends Error {  // ← Error já tem 'message'
+     status: number
+     detail?: string
+   }
+   ```
+   
+   Interface tem `message` explícito, mas classe herda de `Error` (que já tem `message`). 
+   Isso sugere que interface foi criada antes e não foi atualizada.
+
+### 🧪 Como Validar a Causa
+
+**Validação 1: TypeScript resolution order**
+
+```typescript
+// Exemplo (não aplicar) — Teste de resolução de tipo
+import { ApiError } from '@/services/api'
+
+// Qual tipo é usado aqui?
+const test: ApiError = {
+  message: 'test',  // ← Se TypeScript aceitar sem 'name', 'stack', está usando interface
+  status: 500,
+  detail: 'test'
+}
+
+// ❌ Se compilar: TypeScript resolveu para interface (ignora Error properties)
+// ✅ Se erro "Property 'name' is missing": TypeScript resolveu para classe
+```
+
+**Validação 2: VSCode Go to Definition**
+
+1. Abrir `src/services/auth.ts` (que importa ApiError)
+2. Clicar com Ctrl+Click em `ApiError`
+3. **Observar:** VSCode vai para linha 10 (interface) ou linha 16 (classe)?
+4. **Repetir:** F12 (Go to Definition) pode ir para lugar diferente de Ctrl+Click
+
+**Validação 3: Build output**
 
 ```bash
-# Procurar uso de ApiError como interface:
-grep -r "ApiError" src/ --include="*.ts" --include="*.tsx"
+# Exemplo (não aplicar) — Verificar .d.ts gerado
+npm run build
+cat dist/services/api.d.ts
+
+# Se aparecer:
+# export interface ApiError { ... }
+# export class ApiError extends Error { ... }
+# ← Confirmado: Duplicação está no output
 ```
 
-Se encontrar uso como tipo, não há problema - a classe pode ser usada como tipo também.
+---
 
-#### Validação
+## 4️⃣ Objetivo (Resultado Verificável)
 
-**Checklist de Validação:**
+### 🎯 Critérios de "Feito"
 
-- [ ] TypeScript compila sem erros:
+**Comportamento esperado após correção:**
+
+1. **IntelliSense limpo:**
+   - Importar `ApiError` mostra apenas uma definição (classe)
+   - Autocomplete sugere todas as propriedades corretas:
+     - `message` (herdado de Error)
+     - `name` (herdado de Error)
+     - `stack` (herdado de Error)
+     - `status` (próprio da classe)
+     - `detail` (próprio da classe)
+
+2. **Go to Definition correto:**
+   - F12 ou Ctrl+Click em `ApiError` vai direto para a classe (linha ~10-20)
+   - Apenas uma definição possível
+
+3. **TypeScript compila sem warnings:**
+   - Zero warnings sobre "duplicate identifier"
+   - Build limpo (`npm run build` - sem erros/warnings)
+
+4. **Funcionalidade preservada:**
+   - Todos os usos de `ApiError` continuam funcionando
+   - `instanceof ApiError` funciona
+   - `throw new ApiError(...)` funciona
+   - Type annotations `error: ApiError` funcionam
+
+### ✅ Validação Objetiva
+
+**Teste 1: IntelliSense mostra apenas classe**
+
+```typescript
+// Exemplo (não aplicar) — Teste de autocomplete
+import { ApiError } from '@/services/api'
+
+const err = new ApiError('Test', 500)
+err.  // ← Pressionar Ctrl+Space aqui
+
+// ✅ Resultado esperado (autocomplete mostra):
+// - message (herdado de Error)
+// - name (herdado de Error)
+// - stack (herdado de Error)
+// - status
+// - detail
+
+// ❌ Falha se: Não mostrar 'message', 'name', 'stack' (sinal de que está usando interface)
+```
+
+**Teste 2: Go to Definition vai para classe**
+
+1. Abrir `src/components/auth/LoginForm.tsx` (importa ApiError)
+2. Posicionar cursor em `ApiError`
+3. Pressionar F12 (Go to Definition)
+4. **✅ Resultado esperado:** VSCode abre `src/services/api.ts` na linha da **classe** (não interface)
+5. **❌ Falha se:** Abrir na linha de interface ou mostrar múltiplas opções
+
+**Teste 3: TypeScript compila limpo**
+
+```bash
+# Exemplo (não aplicar) — Compilação limpa
+npx tsc --noEmit
+
+# ✅ Resultado esperado:
+# (nenhum output - sucesso silencioso)
+
+# ❌ Falha se:
+# src/services/api.ts(16,7): error TS2300: Duplicate identifier 'ApiError'.
+# src/services/api.ts(10,18): error TS2300: Duplicate identifier 'ApiError'.
+```
+
+**Teste 4: Runtime funciona identicamente**
+
+```bash
+# Exemplo (não aplicar) — Teste de login com erro 401
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"wrong@test.com","password":"wrong"}'
+
+# Frontend deve capturar erro corretamente
+# Console do browser:
+# ✅ Resultado esperado: ApiError { message: "Incorrect email or password", status: 401 }
+# ❌ Falha se: Erro não é instanceof ApiError
+```
+
+**Teste 5: Build production funciona**
+
+```bash
+# Exemplo (não aplicar) — Build de produção
+npm run build
+
+# ✅ Resultado esperado:
+# vite v4.x.x building for production...
+# ✓ built in Xs
+# dist/index.html                   X kB
+# dist/assets/index-XXXXX.js        X kB / gzip: X kB
+
+# ❌ Falha se: Warnings sobre ApiError no build
+```
+
+---
+
+## 5️⃣ Escopo (IN / OUT)
+
+### ✅ IN — O que entra nesta correção
+
+1. **Remover interface ApiError:**
+   - Deletar linhas 10-14 de `src/services/api.ts`
+   - Interface `ApiError` será completamente removida
+
+2. **Manter classe ApiError:**
+   - Classe `ApiError extends Error` permanece inalterada
+   - Todos os métodos, propriedades e constructor mantidos
+
+3. **Adicionar export explícito:**
+   - Adicionar `export { ApiError }` no final do arquivo (opcional, mas recomendado para clareza)
+   - OU adicionar `export` antes de `class ApiError`
+
+4. **Validação de imports:**
+   - Verificar que todos os arquivos que importam `ApiError` continuam funcionando
+   - Não é necessário alterar imports (classe é exportável)
+
+5. **Testes manuais:**
+   - Compilação TypeScript (`npx tsc --noEmit`)
+   - Iniciar frontend (`npm run dev`)
+   - Testar cenário de erro (login inválido)
+
+### ❌ OUT — O que fica FORA desta correção
+
+1. **Refatoração da classe ApiError:**
+   - Não alterar estrutura da classe
+   - Não adicionar/remover propriedades
+   - Não mudar herança (`extends Error` permanece)
+   - Refactoring maior é escopo de ARCH-XXX (se necessário)
+
+2. **Testes automatizados:**
+   - Não criar unit tests para ApiError
+   - Testes automatizados ficam para MAINT-003 (suite de testes)
+   - Esta correção usa apenas testes manuais
+
+3. **Melhorias de error handling:**
+   - Não adicionar error codes
+   - Não implementar error serialization
+   - Não criar error mapping/translation
+   - Melhorias ficam para PERF-XXX ou UX-XXX
+
+4. **Criação de tipos adicionais:**
+   - Não criar `IApiError` (interface separada)
+   - Não criar `ApiErrorOptions` (type para constructor)
+   - Não criar union types de erros específicos
+   - Expansão de tipos é escopo futuro
+
+5. **Alteração de outros arquivos:**
+   - Não modificar arquivos que importam `ApiError` (a menos que haja erro de compilação)
+   - Não alterar error handling em componentes
+   - Não modificar try-catch blocks existentes
+
+6. **Documentação de API:**
+   - Não adicionar JSDoc comments extensivos
+   - Não criar documentation de error handling
+   - Documentação detalhada fica para DOCS-XXX
+
+### 🎯 Fronteira clara
+
+| Ação | IN / OUT | Justificativa |
+|------|----------|---------------|
+| Deletar interface ApiError | ✅ IN | Objetivo principal da correção |
+| Manter classe ApiError | ✅ IN | Solução escolhida (classe serve como tipo) |
+| Alterar imports em outros arquivos | ❌ OUT | Imports funcionam com classe (não precisa mudar) |
+| Adicionar unit tests | ❌ OUT | Escopo de MAINT-003 (não urgente) |
+| Melhorar mensagens de erro | ❌ OUT | Escopo de UX/i18n (não relacionado) |
+| Criar error boundary | ❌ OUT | Correção #8 (P0-015) - já mapeada |
+
+---
+
+## 6️⃣ Mudanças Propostas (Alto Nível)
+
+### 📝 Arquivo: `src/services/api.ts`
+
+**Localização:** Linhas 10-26  
+**Natureza:** Remoção de código duplicado (interface)
+
+**Opção A: Remover interface (RECOMENDADA)**
+
+#### Exemplo (não aplicar) — ANTES (linhas 10-26)
+```typescript
+// src/services/api.ts
+export interface ApiError {  // ← REMOVER estas linhas (10-14)
+    message: string;
+    status: number;
+    detail?: string;
+}
+
+class ApiError extends Error {  // ← MANTER e tornar exportável
+    status: number;
+    detail?: string;
+
+    constructor(message: string, status: number, detail?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.detail = detail;
+    }
+}
+```
+
+#### Exemplo (não aplicar) — DEPOIS (linhas 10-20)
+```typescript
+// src/services/api.ts
+
+// Interface removida ✓
+
+export class ApiError extends Error {  // ← 'export' adicionado
+    status: number;
+    detail?: string;
+
+    constructor(message: string, status: number, detail?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.detail = detail;
+    }
+}
+
+// Classe pode ser usada como tipo:
+// function handle(error: ApiError) { ... }  ✓
+// throw new ApiError('msg', 500)  ✓
+// error instanceof ApiError  ✓
+```
+
+**Justificativa técnica:**
+- Classes em TypeScript são tipos estruturais
+- Classe `ApiError` já serve como tipo e valor
+- Interface separada é redundante
+- `extends Error` já fornece `message`, `name`, `stack`
+
+**Opção B: Renomear interface (ALTERNATIVA - não recomendada)**
+
+#### Exemplo (não aplicar) — Alternativa: Renomear interface
+```typescript
+// src/services/api.ts
+
+// Opção B (não recomendada): Renomear interface para IApiError
+export interface IApiError {  // ← Prefixo 'I' (convenção antiga)
+    message: string;
+    status: number;
+    detail?: string;
+}
+
+// Classe implementa interface
+export class ApiError extends Error implements IApiError {
+    status: number;
+    detail?: string;
+    
+    constructor(message: string, status: number, detail?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.detail = detail;
+    }
+}
+
+// Problema: Precisa atualizar imports em outros arquivos:
+// import { IApiError } from '@/services/api'  ← Mudança invasiva
+```
+
+**Por que NÃO fazer Opção B:**
+- Requer mudanças em múltiplos arquivos (imports)
+- Prefixo `I` é convenção antiga (não mais recomendada em TS moderno)
+- Adiciona complexidade sem ganho real
+- Interface seria usada apenas para type annotations (classe já serve)
+
+**Decisão:** Vamos com **Opção A** (remover interface)
+
+### 🔍 Impacto em Outros Arquivos
+
+**Arquivos que importam ApiError:**
+
+```bash
+# Exemplo (não aplicar) — Buscar imports
+grep -r "import.*ApiError" src/ --include="*.ts" --include="*.tsx"
+```
+
+**Resultado esperado (exemplo):**
+```
+src/services/auth.ts: import { api, ApiError } from './api'
+src/components/auth/LoginForm.tsx: import { ApiError } from '@/services/api'
+src/contexts/AuthContext.tsx: import { ApiError } from '@/services/api'
+```
+
+**Ação necessária:** ✅ NENHUMA
+- Imports continuam funcionando (classe é exportável)
+- Usos como tipo continuam funcionando (classe serve como tipo)
+- Usos como instanceof continuam funcionando (classe é construtor)
+
+**Validação:**
+
+#### Exemplo (não aplicar) — Usos típicos continuam funcionando
+```typescript
+// src/services/auth.ts
+import { ApiError } from './api'
+
+// Uso 1: Type annotation ✓
+export async function login(email: string, password: string): Promise<User> {
+  try {
+    return await api('/auth/login', { ... })
+  } catch (error) {
+    if (error instanceof ApiError) {  // Uso 2: instanceof ✓
+      if (error.status === 401) {
+        throw new Error('Invalid credentials')  // Uso 3: propriedade ✓
+      }
+    }
+    throw error
+  }
+}
+
+// Uso 4: Throw ✓
+throw new ApiError('Not found', 404)
+
+// Uso 5: Catch type ✓
+catch (error: ApiError) {
+  console.error(error.message)  // 'message' vem de Error
+}
+```
+
+Todos esses usos continuam funcionando após remover interface.
+
+---
+
+## 7️⃣ Alternativas Consideradas
+
+### 🔄 Trade-offs de Cada Abordagem
+
+#### Alternativa 1: Remover Interface (ESCOLHIDA ✅)
+
+**Prós:**
+- ✅ Mais simples (menos código)
+- ✅ Zero mudanças em outros arquivos
+- ✅ Segue convenções modernas de TypeScript
+- ✅ Classe já serve como tipo
+- ✅ IntelliSense mais claro
+
+**Contras:**
+- ⚠️ Perde separação interface/implementação (menos relevante aqui)
+- ⚠️ Não pode ter interface mais "loose" que classe (não é o caso)
+
+**Decisão:** ✅ **ESCOLHIDA** - Prós superam cons significativamente
+
+---
+
+#### Alternativa 2: Renomear Interface para IApiError
+
+**Prós:**
+- ✅ Mantém interface separada (mais "tradicional")
+- ✅ Permite ter contrato mais amplo que implementação
+
+**Contras:**
+- ❌ Requer mudanças em múltiplos arquivos (imports)
+- ❌ Prefixo `I` é convenção antiga (C#/Java style, não TS moderno)
+- ❌ Mais código para manter
+- ❌ Interface seria redundante (classe já é tipo)
+- ❌ Risco de introduzir bugs ao mudar imports
+
+**Decisão:** ❌ **REJEITADA** - Cons superam prós
+
+---
+
+#### Alternativa 3: Renomear Classe para ApiException
+
+**Prós:**
+- ✅ Mantém interface ApiError
+- ✅ Clareza semântica ("Exception" indica throwable)
+
+**Contras:**
+- ❌ Mudanças MASSIVAS em codebase (todos os try-catch)
+- ❌ "Exception" não é convenção JavaScript/TypeScript (é Java/C#)
+- ❌ Alto risco de regressão
+- ❌ Esforço muito maior (~1h vs 3min)
+
+**Decisão:** ❌ **REJEITADA** - Muito invasivo para ganho mínimo
+
+---
+
+#### Alternativa 4: Manter Ambos e Usar namespace
+
+**Prós:**
+- ✅ TypeScript permite namespace merging
+- ✅ Academicamente interessante
+
+**Contras:**
+- ❌ Complexidade desnecessária
+- ❌ IntelliSense ainda confuso
+- ❌ Não resolve o problema real
+- ❌ Mais difícil de entender para novos devs
+
+**Decisão:** ❌ **REJEITADA** - Over-engineering
+
+---
+
+### 📊 Matriz de Decisão
+
+| Critério | Alt 1: Remover Interface | Alt 2: Renomear IApiError | Alt 3: Renomear Classe | Alt 4: Namespace |
+|----------|:------------------------:|:-------------------------:|:----------------------:|:----------------:|
+| **Simplicidade** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐ | ⭐ |
+| **Sem mudanças em outros arquivos** | ⭐⭐⭐⭐⭐ | ⭐ | ⭐ | ⭐⭐⭐ |
+| **Convenções TS modernas** | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ |
+| **DX (Developer Experience)** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐ |
+| **Risco de regressão** | ⭐⭐⭐⭐⭐ (zero) | ⭐⭐⭐ (baixo) | ⭐ (alto) | ⭐⭐ (médio) |
+| **Tempo de implementação** | ⭐⭐⭐⭐⭐ (3min) | ⭐⭐⭐ (20min) | ⭐ (1h) | ⭐⭐ (30min) |
+| **TOTAL** | **30/30** 🏆 | **14/30** | **9/30** | **10/30** |
+
+**Vencedor claro:** Alternativa 1 (Remover Interface)
+
+---
+
+## 8️⃣ Riscos e Mitigações
+
+### ⚠️ Risco 1: Interface estava sendo usada explicitamente
+
+**Descrição:**
+Algum arquivo pode ter dependência explícita na interface (não na classe).
+
+**Probabilidade:** 🟡 BAIXA (~10%)
+
+**Evidência:**
+```bash
+# Exemplo (não aplicar) — Buscar uso explícito de interface
+grep -r ": ApiError" src/ --include="*.ts" --include="*.tsx"
+```
+
+**Impacto se ocorrer:**
+- Erro de compilação TypeScript
+- Build quebra
+- Fácil de detectar (tsc mostra erro)
+
+**Mitigação:**
+1. **Preventiva:** Rodar `npx tsc --noEmit` ANTES de commitar
+2. **Reativa:** Se erro aparecer, substituir usos por classe (mesmo nome, funciona)
+3. **Fallback:** `git checkout HEAD -- src/services/api.ts` (reverter)
+
+**Plano de ação se ocorrer:**
+```bash
+# Exemplo (não aplicar) — Se compilação falhar
+npx tsc --noEmit
+# Ler erro, identificar arquivo
+# Verificar se código está tentando usar ApiError de forma incompatível
+# Ajustar se necessário (raro)
+```
+
+---
+
+### ⚠️ Risco 2: Type narrowing quebra
+
+**Descrição:**
+Código que usa type guards pode não funcionar corretamente.
+
+**Probabilidade:** 🟢 MUITO BAIXA (~1%)
+
+**Exemplo potencial:**
+```typescript
+// Exemplo (não aplicar) — Potencial problema (improvável)
+function isApiError(error: unknown): error is ApiError {
+  return typeof error === 'object' && 
+         error !== null && 
+         'status' in error  // ← Pode ser muito loose
+}
+```
+
+**Impacto se ocorrer:**
+- Type guards muito permissivos
+- Runtime pode aceitar objetos que não são ApiError
+- Bugs sutis em error handling
+
+**Mitigação:**
+1. **Preventiva:** Usar `instanceof` ao invés de type guards manuais
+2. **Verificação:** Buscar por `is ApiError` no codebase
+3. **Best practice:** Sempre preferir `instanceof ApiError` (funciona com classe)
+
+```bash
+# Exemplo (não aplicar) — Buscar type guards customizados
+grep -r "is ApiError" src/ --include="*.ts" --include="*.tsx"
+# Resultado esperado: NENHUM
+```
+
+**Plano de ação se ocorrer:**
+```typescript
+// Exemplo (não aplicar) — Converter type guard para instanceof
+// ANTES:
+function isApiError(error: unknown): error is ApiError {
+  return typeof error === 'object' && error !== null && 'status' in error
+}
+
+// DEPOIS (mais seguro):
+function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError
+}
+```
+
+---
+
+### ⚠️ Risco 3: Build de produção tem comportamento diferente
+
+**Descrição:**
+TypeScript compilation target pode afetar como classe é emitida.
+
+**Probabilidade:** 🟢 MUITO BAIXA (~2%)
+
+**Evidência:**
+Depende de `tsconfig.json`:
+```json
+{
+  "compilerOptions": {
+    "target": "ES2015"  // Ou superior - classes nativas
+  }
+}
+```
+
+**Impacto se ocorrer:**
+- Em targets muito antigos (ES5), classe pode virar função
+- `instanceof` pode não funcionar em edge cases
+
+**Mitigação:**
+1. **Verificação:** Confirmar `target` no tsconfig.json (deve ser ES2015+)
+2. **Teste:** Build de produção e testar error handling
+3. **Baseline:** Target atual já funciona com classes
+
+```bash
+# Exemplo (não aplicar) — Verificar target
+cat tsconfig.json | grep '"target"'
+# Resultado esperado: "target": "ES2020" ou superior
+```
+
+---
+
+### ⚠️ Risco 4: IntelliSense cache não atualiza
+
+**Descrição:**
+VSCode pode cachear definições antigas, mostrando interface mesmo depois de removida.
+
+**Probabilidade:** 🟡 MÉDIA (~30%)
+
+**Impacto se ocorrer:**
+- Desenvolvedor vê definição antiga (fantasma)
+- Go to Definition ainda mostra interface
+- Autocomplete confuso
+
+**Mitigação:**
+1. **Preventiva:** Reiniciar TypeScript server no VSCode
+   - Cmd+Shift+P → "TypeScript: Restart TS Server"
+2. **Reativa:** Fechar e reabrir VSCode
+3. **Última opção:** Deletar `node_modules/.vite` (cache do Vite)
+
+**Plano de ação:**
+```bash
+# Exemplo (não aplicar) — Limpar caches
+# 1. VSCode: Cmd+Shift+P → Reload Window
+# 2. Terminal:
+rm -rf node_modules/.vite
+rm -rf dist
+npm run dev
+```
+
+---
+
+### 📊 Resumo de Riscos
+
+| Risco | Probabilidade | Impacto | Severidade | Mitigação |
+|-------|:-------------:|:-------:|:----------:|-----------|
+| Interface usada explicitamente | 🟡 Baixa (10%) | Alto | 🟡 Médio | `tsc --noEmit` + correção pontual |
+| Type narrowing quebra | 🟢 Muito Baixa (1%) | Médio | 🟢 Baixo | Usar `instanceof` |
+| Build produção diferente | 🟢 Muito Baixa (2%) | Alto | 🟢 Baixo | Verificar target ES2015+ |
+| Cache IntelliSense | 🟡 Média (30%) | Baixo | 🟢 Baixo | Restart TS Server |
+
+**Risco Global:** 🟢 **BAIXO** - Todos os riscos são facilmente mitigáveis
+
+---
+
+## 9️⃣ Casos de Teste (Manuais, Passo a Passo)
+
+### 🧪 Teste 1: TypeScript Compila Sem Erros
+
+**Objetivo:** Verificar que remoção de interface não quebra compilação.
+
+**Pré-condição:** Código com interface ainda presente.
+
+**Passos:**
+```bash
+# 1. Baseline (ANTES da mudança)
+npx tsc --noEmit
+# Resultado esperado: Possível warning sobre duplicate identifier
+
+# 2. Aplicar correção (remover interface)
+code src/services/api.ts
+# Remover linhas 10-14 (interface ApiError)
+# Adicionar 'export' antes de 'class ApiError'
+# Salvar (Ctrl+S)
+
+# 3. Validar (DEPOIS da mudança)
+npx tsc --noEmit
+# ✅ Resultado esperado: Nenhum output (sucesso silencioso)
+# ❌ Falha se: Erro de compilação aparece
+```
+
+**Critério de sucesso:** ✅ TypeScript compila sem erros ou warnings.
+
+**Rollback se falhar:**
+```bash
+# Exemplo (não aplicar)
+git checkout HEAD -- src/services/api.ts
+npx tsc --noEmit  # Deve voltar ao estado anterior
+```
+
+---
+
+### 🧪 Teste 2: Frontend Inicia Sem Erros
+
+**Objetivo:** Verificar que mudança não quebra inicialização.
+
+**Pré-condição:** Correção aplicada, TypeScript compilando.
+
+**Passos:**
+```bash
+# 1. Parar frontend (se rodando)
+# Ctrl+C no terminal do 'npm run dev'
+
+# 2. Limpar cache (preventivo)
+rm -rf node_modules/.vite
+
+# 3. Iniciar frontend
+npm run dev
+
+# Aguardar mensagem de sucesso:
+# ✅ Resultado esperado:
+#   VITE v4.x.x  ready in Xms
+#   ➜  Local:   http://localhost:5173/
+#   ➜  Network: use --host to expose
+
+# ❌ Falha se:
+#   - Erro de compilação TypeScript
+#   - Frontend não inicia
+#   - Console mostra erro relacionado a ApiError
+```
+
+**Validação no browser:**
+1. Abrir http://localhost:5173
+2. Abrir DevTools Console (F12)
+3. **✅ Resultado esperado:** Nenhum erro de runtime
+4. **❌ Falha se:** "ApiError is not defined" ou similar
+
+**Critério de sucesso:** ✅ Frontend inicia e carrega sem erros no console.
+
+---
+
+### 🧪 Teste 3: IntelliSense Mostra Apenas Classe
+
+**Objetivo:** Verificar que IDE não está mais confuso.
+
+**Pré-condição:** Frontend rodando, VSCode aberto.
+
+**Passos:**
+```typescript
+// 1. Abrir arquivo de teste
+// src/test-apierror-validation.ts (criar temporário)
+
+// 2. Importar ApiError
+import { ApiError } from '@/services/api'
+
+// 3. Hover sobre 'ApiError' na linha de import
+//    Cmd+K Cmd+I (Mac) ou Ctrl+K Ctrl+I (Windows)
+
+// ✅ Resultado esperado (tooltip mostra):
+//    class ApiError extends Error
+//    Property status: number
+//    Property detail?: string
+//    Constructor(...): ApiError
+
+// ❌ Falha se (tooltip mostra):
+//    interface ApiError  ← Não deve aparecer
+//    ou múltiplas definições
+
+// 4. Teste de autocomplete
+const err = new ApiError('Test', 500)
+err.  // ← Ctrl+Space aqui
+
+// ✅ Resultado esperado (autocomplete mostra):
+//    message (inherited from Error)
+//    name (inherited from Error)
+//    stack (inherited from Error)
+//    status
+//    detail
+
+// ❌ Falha se: Não mostrar propriedades de Error (message, stack)
+
+// 5. Teste de Go to Definition
+//    Ctrl+Click (ou F12) em 'ApiError'
+
+// ✅ Resultado esperado:
+//    VSCode abre src/services/api.ts na linha da CLASSE (não interface)
+//    Apenas uma definição possível
+
+// ❌ Falha se:
+//    Mostrar múltiplas opções de definição
+//    Ir para linha errada
+```
+
+**Limpeza:**
+```bash
+# Exemplo (não aplicar) — Deletar arquivo de teste
+rm src/test-apierror-validation.ts
+```
+
+**Critério de sucesso:** ✅ IntelliSense funciona perfeitamente, sem ambiguidade.
+
+---
+
+### 🧪 Teste 4: Error Handling Funciona em Runtime
+
+**Objetivo:** Verificar que catch/throw de ApiError funciona.
+
+**Pré-condição:** Frontend rodando em dev mode.
+
+**Passos:**
+
+**4.1 - Testar throw de ApiError:**
+```bash
+# 1. Abrir http://localhost:5173
+# 2. Abrir DevTools Console
+# 3. Colar e executar este código no console:
+
+import { ApiError } from '/src/services/api'
+const err = new ApiError('Test Error', 404, 'Not found')
+console.log(err instanceof Error)      // ✅ Deve ser true
+console.log(err instanceof ApiError)   // ✅ Deve ser true
+console.log(err.message)               // ✅ Deve ser "Test Error"
+console.log(err.status)                // ✅ Deve ser 404
+console.log(err.detail)                // ✅ Deve ser "Not found"
+console.log(err.name)                  // ✅ Deve ser "ApiError"
+```
+
+**4.2 - Testar catch de ApiError real (login com credenciais erradas):**
+```bash
+# 1. Ir para página de login: http://localhost:5173
+# 2. Inserir credenciais ERRADAS:
+#    Email: wrong@test.com
+#    Password: wrongpassword
+# 3. Clicar em "Entrar"
+
+# ✅ Resultado esperado:
+#    - Toast de erro aparece: "Incorrect email or password"
+#    - Console mostra ApiError { status: 401, ... }
+#    - Página NÃO quebra (erro tratado gracefully)
+
+# ❌ Falha se:
+#    - Erro não capturado (página quebra)
+#    - TypeError: "error is not instanceof ApiError"
+#    - Toast não aparece
+```
+
+**4.3 - Testar catch de erro genérico (network down):**
+```bash
+# 1. DevTools → Network tab → Offline checkbox ✓
+# 2. Tentar fazer login
+# 3. Observar comportamento
+
+# ✅ Resultado esperado:
+#    - Toast de erro genérico aparece
+#    - Erro NÃO é ApiError (é TypeError ou similar)
+#    - Aplicação trata gracefully
+
+# 4. Desativar Offline mode (Network tab)
+```
+
+**Critério de sucesso:** ✅ Todos os cenários de erro funcionam identicamente ao antes da mudança.
+
+---
+
+### 🧪 Teste 5: Build de Produção Funciona
+
+**Objetivo:** Verificar que build final não tem problemas.
+
+**Pré-condição:** Todos os testes anteriores passaram.
+
+**Passos:**
+```bash
+# 1. Build de produção
+npm run build
+
+# ✅ Resultado esperado:
+#   vite v4.x.x building for production...
+#   transforming...
+#   ✓ X modules transformed.
+#   rendering chunks...
+#   computing gzip size...
+#   dist/index.html                  X.XX kB │ gzip: X.XX kB
+#   dist/assets/index-XXXXX.js       XXX.XX kB │ gzip: XX.XX kB
+#   ✓ built in Xs
+
+# ❌ Falha se:
+#   - Erro de build
+#   - Warning sobre ApiError
+#   - Build muito maior que antes (sinal de problema)
+
+# 2. Servir build de produção
+npx vite preview
+
+# 3. Abrir http://localhost:4173
+# 4. Testar login com credenciais erradas (mesmo teste 4.2)
+
+# ✅ Resultado esperado: Comportamento idêntico a dev mode
+# ❌ Falha se: Erro em produção que não ocorre em dev
+```
+
+**Validação de bundle:**
+```bash
+# Exemplo (não aplicar) — Inspecionar bundle
+grep -r "ApiError" dist/assets/*.js
+
+# ✅ Resultado esperado:
+#   ApiError aparece no bundle (classe foi incluída)
+#   Apenas uma definição (não interface + classe)
+
+# ❌ Falha se:
+#   ApiError não aparece (não foi incluído)
+#   Múltiplas definições diferentes
+```
+
+**Critério de sucesso:** ✅ Build de produção funciona identicamente a dev mode.
+
+---
+
+### 🧪 Teste 6: VSCode Restart Limpa Cache
+
+**Objetivo:** Garantir que cache do IDE foi atualizado.
+
+**Pré-condição:** Correção aplicada, mas IntelliSense ainda mostra interface.
+
+**Passos:**
+```bash
+# 1. VSCode - Restart TypeScript Server
+#    Cmd+Shift+P (Mac) ou Ctrl+Shift+P (Windows)
+#    Digitar: "TypeScript: Restart TS Server"
+#    Enter
+
+# 2. Aguardar 3-5 segundos (server reinicia)
+
+# 3. Testar autocomplete novamente (Teste 3)
+#    Abrir arquivo que importa ApiError
+#    Hover sobre ApiError
+
+# ✅ Resultado esperado:
+#    IntelliSense agora mostra apenas classe (cache limpo)
+
+# ❌ Falha se: Ainda mostra interface (cache persistiu)
+
+# 4. Opção nuclear (se ainda falhar):
+#    Fechar VSCode completamente
+#    Abrir novamente
+#    Aguardar indexação completa
+#    Testar novamente
+```
+
+**Critério de sucesso:** ✅ IntelliSense atualizado após restart.
+
+---
+
+### 📊 Matriz de Testes
+
+| Teste | Criticidade | Tempo | Automação Futura |
+|-------|:-----------:|:-----:|:----------------:|
+| 1. TypeScript Compila | 🔴 CRÍTICO | 10s | ✅ CI/CD |
+| 2. Frontend Inicia | 🔴 CRÍTICO | 30s | ✅ CI/CD |
+| 3. IntelliSense Limpo | 🟡 IMPORTANTE | 2min | ❌ Manual |
+| 4. Error Handling Runtime | 🔴 CRÍTICO | 3min | ✅ E2E Tests |
+| 5. Build Produção | 🔴 CRÍTICO | 1min | ✅ CI/CD |
+| 6. VSCode Cache | 🟢 OPCIONAL | 1min | ❌ Manual |
+
+**Total de tempo de teste:** ~7-8 minutos (incluindo build)
+
+---
+
+## 🔟 Checklist de Implementação (Para Depois, Não Aplicar Agora)
+
+Este checklist será usado quando a correção for **APROVADA** para implementação:
+
+### Fase 1: Preparação (2 min)
+
+- [ ] **1.1** Verificar que Nível 0 está completo (Correções #1-#5)
   ```bash
-  npx tsc --noEmit
+  git log --oneline | head -10
+  # Deve mostrar commits de P0-001, CS-002, CS-001, P0-004, P0-008
   ```
 
-- [ ] Frontend inicia:
+- [ ] **1.2** Frontend rodando sem erros
   ```bash
   npm run dev
+  # Verificar: VITE ready, sem erros no console
   ```
 
-- [ ] Testar chamadas à API:
-  1. Fazer login
-  2. Navegar pelo dashboard
-  3. Erros de API (404, 401) devem funcionar normalmente
+- [ ] **1.3** TypeScript compilando clean (baseline)
+  ```bash
+  npx tsc --noEmit
+  # Resultado: Possível warning sobre ApiError duplicado (OK por enquanto)
+  ```
 
-- [ ] Console sem erros TypeScript
+- [ ] **1.4** Git status limpo
+  ```bash
+  git status
+  # Resultado esperado: "nothing to commit, working tree clean"
+  # Se houver mudanças não commitadas, stash ou commit primeiro
+  ```
 
-#### Commit
+- [ ] **1.5** Fazer checkpoint
+  ```bash
+  git add .
+  git commit -m "checkpoint: before P0-013 (ApiError duplicate fix)"
+  ```
 
-```bash
-git add src/services/api.ts
-git commit -m "fix: remove duplicate ApiError interface (P0-013)
+- [ ] **1.6** Abrir arquivo alvo
+  ```bash
+  code src/services/api.ts
+  # Ou editor preferido: vim, nano, etc.
+  ```
 
-- Removed interface definition (kept class only)
-- Fixes TypeScript naming conflict
-- Class can be used as type interface
-- Risk Level: LOW
-- Ref: docs/MELHORIAS-E-CORRECOES.md#P0-013"
+### Fase 2: Aplicação da Mudança (1 min)
+
+- [ ] **2.1** Localizar interface ApiError
+  - Ir para linha 10 (Ctrl+G → 10)
+  - Confirmar que é `export interface ApiError {`
+
+- [ ] **2.2** Selecionar linhas 10-14 completas
+  - Incluir linha vazia após `}` (linha 14)
+  - Seleção deve incluir TODA a interface
+
+- [ ] **2.3** Deletar interface
+  - Delete (ou Ctrl+Shift+K no VSCode)
+  - Verificar que linhas foram removidas
+
+- [ ] **2.4** Adicionar export à classe
+  - Localizar `class ApiError extends Error {` (agora deve estar na linha ~10)
+  - Mudar para: `export class ApiError extends Error {`
+  - OU manter sem export e adicionar no final: `export { ApiError }`
+
+- [ ] **2.5** Salvar arquivo
+  - Ctrl+S (Windows/Linux) ou Cmd+S (Mac)
+  - Verificar que asterisco (*) sumiu do nome do arquivo na aba
+
+### Fase 3: Validação Imediata (2 min)
+
+- [ ] **3.1** TypeScript compila sem erros
+  ```bash
+  npx tsc --noEmit
+  # ✅ Resultado esperado: Nenhum output (sucesso silencioso)
+  # ❌ Se erro: Ler mensagem, verificar se é relacionado a ApiError
+  ```
+
+- [ ] **3.2** Frontend recarrega sem erros
+  - Vite deve recarregar automaticamente (HMR)
+  - Verificar terminal: `hmr update /src/services/api.ts`
+  - Verificar browser console: Sem erros
+
+- [ ] **3.3** IntelliSense atualizado (verificação rápida)
+  - Abrir `src/components/auth/LoginForm.tsx`
+  - Hover sobre `ApiError` importado
+  - Deve mostrar apenas classe (não interface)
+  - Se ainda mostrar interface: Restart TS Server (Cmd+Shift+P)
+
+### Fase 4: Testes Manuais (3-4 min)
+
+- [ ] **4.1** Teste de erro 401 (credenciais erradas)
+  - Ir para http://localhost:5173
+  - Fazer login com `wrong@test.com` / `wrongpass`
+  - ✅ Verificar: Toast de erro aparece
+  - ✅ Verificar: Console mostra ApiError (não crash)
+
+- [ ] **4.2** Teste de erro 404 (rota inexistente)
+  - Console do browser: `await fetch('/api/v1/nonexistent')`
+  - ✅ Verificar: ApiError com status 404
+
+- [ ] **4.3** Teste de sucesso (login válido)
+  - Fazer login com credenciais válidas
+  - ✅ Verificar: Login funciona normalmente
+  - ✅ Verificar: Redirect para dashboard
+
+### Fase 5: Build de Produção (1 min)
+
+- [ ] **5.1** Build completo
+  ```bash
+  npm run build
+  # ✅ Resultado esperado: "✓ built in Xs"
+  # ❌ Se erro: Não commitar, investigar
+  ```
+
+- [ ] **5.2** Testar preview de produção (opcional mas recomendado)
+  ```bash
+  npx vite preview
+  # Abrir http://localhost:4173
+  # Testar login com credenciais erradas
+  # ✅ Verificar: Erro tratado identicamente a dev mode
+  ```
+
+### Fase 6: Commit e Documentação (2 min)
+
+- [ ] **6.1** Revisar diff antes de commitar
+  ```bash
+  git diff src/services/api.ts
+  # Verificar:
+  # - Apenas linhas 10-14 removidas (interface)
+  # - 'export' adicionado à classe
+  # - Nada mais mudou
+  ```
+
+- [ ] **6.2** Stage arquivo modificado
+  ```bash
+  git add src/services/api.ts
+  ```
+
+- [ ] **6.3** Commit com mensagem descritiva
+  ```bash
+  git commit -m "fix(P0-013): remove duplicate ApiError interface
+  
+  - Removed interface definition (lines 10-14)
+  - Kept class ApiError extends Error as single source of truth
+  - Class serves as both type and value (TypeScript feature)
+  - Fixes IntelliSense confusion and potential TS strict mode errors
+  - Zero changes to imports or usage (class is drop-in replacement)
+  
+  Testing:
+  - ✅ TypeScript compiles clean (npx tsc --noEmit)
+  - ✅ Frontend starts without errors
+  - ✅ Error handling works (401 tested)
+  - ✅ Production build succeeds
+  
+  Risk Level: LOW
+  Refs: docs/MELHORIAS-PASSO-A-PASSO.md#correção-6"
+  ```
+
+- [ ] **6.4** Push para repositório (se aplicável)
+  ```bash
+  git push origin main
+  # Ou branch de trabalho
+  ```
+
+### Fase 7: Validação Pós-Commit (Opcional mas Recomendada) (2 min)
+
+- [ ] **7.1** Pull request / Code review
+  - Criar PR se workflow do time exigir
+  - Marcar reviewer
+  - Adicionar label: `typescript`, `cleanup`, `low-risk`
+
+- [ ] **7.2** CI/CD checks (se aplicável)
+  - Aguardar GitHub Actions / GitLab CI
+  - Verificar que testes automatizados passaram
+
+- [ ] **7.3** Atualizar documento de verificação
+  - Abrir `docs/VERIFICACAO.md`
+  - Adicionar seção para Correção #6 (quando implementado)
+
+### Fase 8: Cleanup (Opcional) (1 min)
+
+- [ ] **8.1** Deletar checkpoint commit (se não for necessário)
+  ```bash
+  # Apenas se checkpoint foi criado e não é mais útil
+  git log --oneline | head -5
+  # Se último commit antes de P0-013 for "checkpoint...", pode squash
+  # git rebase -i HEAD~2
+  # Escolher "squash" no checkpoint
+  ```
+
+- [ ] **8.2** Restart IDE (limpar cache completamente)
+  - Fechar VSCode
+  - Abrir novamente
+  - Aguardar indexação completa (~10s)
+
+- [ ] **8.3** Celebrar! 🎉
+  - Correção #6 completa
+  - Código mais limpo
+  - DX melhorada
+
+---
+
+### 📊 Tempo Total Estimado
+
+| Fase | Tempo Estimado |
+|------|:--------------:|
+| 1. Preparação | 2 min |
+| 2. Aplicação | 1 min |
+| 3. Validação Imediata | 2 min |
+| 4. Testes Manuais | 3-4 min |
+| 5. Build Produção | 1 min |
+| 6. Commit | 2 min |
+| 7. Pós-Commit (opcional) | 2 min |
+| 8. Cleanup (opcional) | 1 min |
+| **TOTAL** | **~10-12 min** |
+
+**Nota:** Tempo pode ser menor (3-5 min) se pular fases opcionais e ter familiaridade com processo.
+
+---
+
+## 1️⃣1️⃣ Assunções e Pontos Ambíguos
+
+### 📋 Assunções Confirmadas
+
+1. **TypeScript configurado corretamente:**
+   - `tsconfig.json` com `target: ES2015` ou superior
+   - Classes são suportadas nativamente
+   - Verificável em: `cat tsconfig.json | grep target`
+
+2. **Classe ApiError é usada em try-catch:**
+   - Código atual usa `catch (error) { if (error instanceof ApiError) }`
+   - Não há usos que dependem exclusivamente da interface
+   - Verificável via: `grep -r "instanceof ApiError" src/`
+
+3. **Interface não é extendida por outras interfaces:**
+   - Nenhum `interface MyError extends ApiError`
+   - Se houvesse, precisaria mover para `extends class ApiError`
+   - Verificável via: `grep -r "extends ApiError" src/ --include="*.ts"`
+
+4. **Classe é sempre throwable:**
+   - `ApiError extends Error` nunca mudará
+   - Herança de Error é crítica para stack traces
+   - Mudança futura quebraria throw/catch existente
+
+5. **Export é usado por módulos:**
+   - Outros arquivos importam `{ ApiError }` de `'@/services/api'`
+   - Import path é consistente (usa alias `@/`)
+   - Verificável via: `grep -r "from.*@/services/api" src/`
+
+### ❓ Pontos Ambíguos (Esclarecimentos Necessários)
+
+#### Ambiguidade 1: Convenção de naming
+
+**Questão:** Se decidirmos manter interface, qual convenção usar?
+
+**Opções:**
+- `IApiError` (convenção C#/Java) - NÃO recomendado
+- `ApiErrorShape` (convenção funcional) - Possível
+- `ApiErrorContract` (convenção DDD) - Possível
+- Apenas classe (ESCOLHIDO) - Mais simples
+
+**Decisão tomada:** Remover interface (não aplicável)
+
+**Se decisão mudar:** Atualizar todos os imports (quebra mudança)
+
+---
+
+#### Ambiguidade 2: Propriedade 'message' na interface
+
+**Questão:** Por que interface tem `message: string` se classe herda de Error?
+
+**Análise:**
+```typescript
+// Interface define:
+interface ApiError {
+  message: string  // ← Explícito
+  status: number
+  detail?: string
+}
+
+// Classe herda:
+class ApiError extends Error {  // Error já tem 'message'
+  status: number
+  detail?: string
+}
 ```
 
-#### Notas Importantes
+**Possíveis razões:**
+1. Interface foi criada antes (quando classe não existia)
+2. Desenvolvedor quis ser explícito sobre contrato
+3. Interface pode ter sido pensada para uso sem classe (nunca foi o caso)
 
-💡 **Classes em TypeScript:**
-- Classes são tipos AND valores
-- Podem ser usadas como interfaces
-- Não precisa de interface separada neste caso
+**Impacto da remoção:**
+- ✅ Classe continua tendo `message` (herdado de Error)
+- ✅ Type annotations funcionam: `error: ApiError` tem `.message`
+- ❌ Redundância eliminada
+
+**Decisão:** Confirma que interface é desnecessária (classe já fornece tudo)
+
+---
+
+#### Ambiguidade 3: Export explícito vs implicit
+
+**Questão:** Usar `export class` ou `class` + `export { ApiError }`?
+
+**Opção A: Export inline (RECOMENDADO)**
+```typescript
+// Exemplo (não aplicar)
+export class ApiError extends Error {
+  // ...
+}
+```
+
+**Prós:**
+- Mais conciso
+- Padrão moderno
+- ESLint geralmente prefere
+
+**Contras:**
+- (nenhum relevante)
+
+**Opção B: Export ao final**
+```typescript
+// Exemplo (não aplicar)
+class ApiError extends Error {
+  // ...
+}
+
+export { ApiError }
+```
+
+**Prós:**
+- Separação de definição e exportação
+- Mais fácil ver todos os exports do módulo
+
+**Contras:**
+- Mais verboso
+- Menos comum em código TS moderno
+
+**Decisão:** Usar **Opção A** (`export class`) - mais idiomático
+
+---
+
+#### Ambiguidade 4: Ordem de propriedades na classe
+
+**Questão:** Classe atual tem:
+```typescript
+class ApiError extends Error {
+  status: number      // Primeiro
+  detail?: string     // Segundo
+  constructor(...)
+}
+```
+
+Mas Error tem `message`, `name`, `stack`. Ordem de declaração importa?
+
+**Resposta:** Não importa para TypeScript/JavaScript
+- Propriedades herdadas vêm antes na cadeia de protótipos
+- Autocomplete mostra todas (ordem pode variar por IDE)
+- Não há razão técnica para reordenar
+
+**Decisão:** Manter ordem atual (não modificar)
+
+---
+
+#### Ambiguidade 5: JSDoc comments
+
+**Questão:** Classe deveria ter JSDoc para documentar?
+
+**Atual:**
+```typescript
+class ApiError extends Error {  // Sem JSDoc
+  status: number;
+  detail?: string;
+}
+```
+
+**Opção com JSDoc:**
+```typescript
+// Exemplo (não aplicar)
+/**
+ * Custom error class for API errors.
+ * 
+ * @extends {Error}
+ * @property {number} status - HTTP status code (e.g., 404, 500)
+ * @property {string} [detail] - Optional detailed error message
+ * 
+ * @example
+ * throw new ApiError('Not found', 404, 'User does not exist')
+ */
+export class ApiError extends Error {
+  status: number;
+  detail?: string;
+  
+  constructor(message: string, status: number, detail?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+```
+
+**Trade-off:**
+- **Prós:** Documentação inline, melhor DX, JSDoc aparece em hovers
+- **Contras:** Mais verboso, pode ficar desatualizado
+
+**Decisão:** **FORA DO ESCOPO** desta correção
+- JSDoc é melhoria separada (DOCS-XXX)
+- Esta correção foca em remover duplicação
+- Pode ser adicionado depois se time decidir
+
+---
+
+### 📝 Assunções sobre Ambiente
+
+| Assunção | Como Verificar | Risco se Falsa |
+|----------|----------------|----------------|
+| TypeScript instalado | `npx tsc --version` | 🔴 ALTO - Correção não aplicável |
+| VSCode ou IDE com TS support | `code --version` | 🟡 MÉDIO - IntelliSense pode não melhorar |
+| Node.js 16+ | `node --version` | 🟢 BAIXO - Build deve funcionar em qualquer versão |
+| Vite como bundler | `grep vite package.json` | 🟢 BAIXO - Correção é agnóstica a bundler |
+| ESLint configurado | `npx eslint --version` | 🟢 BAIXO - Não crítico para esta correção |
+
+---
+
+### 🔍 Pontos de Atenção para Implementação
+
+1. **Não confundir interface com type alias:**
+   - Se codebase usa `type ApiError = { ... }`, é diferente
+   - Nossa correção é sobre `interface ApiError`, não `type`
+
+2. **Verificar se há barrel exports:**
+   - Se `src/services/index.ts` re-exporta ApiError
+   - Export deve ser atualizado se mudou de `export interface` para `export class`
+   - Verificar: `cat src/services/index.ts | grep ApiError`
+
+3. **Propriedades readonly:**
+   - Classe não define `readonly status`
+   - Interface também não
+   - Se alguém espera imutabilidade, pode ser problema futuro
+   - **Decisão:** FORA DO ESCOPO (design atual não tem readonly)
+
+4. **Branded types (avançado):**
+   - Se alguém usava interface para branded type: `interface ApiError { __brand: 'ApiError' }`
+   - Nossa classe não tem brand
+   - **Verificação:** `grep __brand src/services/api.ts` → deve ser vazio
+
+---
+
+## 1️⃣2️⃣ Apêndice: Exemplos (NÃO Aplicar)
+
+### 📚 Exemplo 1: Estado ANTES da Correção
+
+#### Exemplo (não aplicar) — src/services/api.ts ANTES
+```typescript
+// API client usando fetch nativo com suporte a cookies httpOnly
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+export interface ApiResponse<T> {
+    data: T;
+    status: number;
+    ok: boolean;
+}
+
+// ❌ PROBLEMA: Interface duplicada
+export interface ApiError {  // ← Linha 10
+    message: string;
+    status: number;
+    detail?: string;
+}
+
+// ❌ PROBLEMA: Classe com mesmo nome
+class ApiError extends Error {  // ← Linha 16
+    status: number;
+    detail?: string;
+
+    constructor(message: string, status: number, detail?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.detail = detail;
+    }
+}
+
+export async function api<T = any>(
+    path: string,
+    init: RequestInit = {}
+): Promise<T> {
+    // ... resto do código
+}
+```
+
+**Problema:** Duas definições de `ApiError` no mesmo módulo.
+
+---
+
+### 📚 Exemplo 2: Estado DEPOIS da Correção
+
+#### Exemplo (não aplicar) — src/services/api.ts DEPOIS
+```typescript
+// API client usando fetch nativo com suporte a cookies httpOnly
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+export interface ApiResponse<T> {
+    data: T;
+    status: number;
+    ok: boolean;
+}
+
+// ✅ SOLUÇÃO: Interface removida, apenas classe
+export class ApiError extends Error {  // ← 'export' adicionado
+    status: number;
+    detail?: string;
+
+    constructor(message: string, status: number, detail?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.detail = detail;
+    }
+}
+
+export async function api<T = any>(
+    path: string,
+    init: RequestInit = {}
+): Promise<T> {
+    // ... resto do código inalterado
+}
+```
+
+**Solução:** Apenas uma definição (`class`), que serve como tipo e valor.
+
+---
+
+### 📚 Exemplo 3: Uso em Outros Arquivos (INALTERADO)
+
+#### Exemplo (não aplicar) — src/services/auth.ts (não muda)
+```typescript
+// ANTES da correção:
+import { api, ApiError } from './api'
+
+export async function login(email: string, password: string): Promise<User> {
+  try {
+    return await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password })
+    })
+  } catch (error) {
+    if (error instanceof ApiError) {  // ← Funciona
+      if (error.status === 401) {
+        throw new Error('Invalid credentials')
+      }
+    }
+    throw error
+  }
+}
+
+// DEPOIS da correção:
+// ✅ EXATAMENTE O MESMO CÓDIGO
+// Import não muda, uso não muda
+// Classe é drop-in replacement para interface
+```
+
+---
+
+### 📚 Exemplo 4: Type Annotations Funcionam
+
+#### Exemplo (não aplicar) — Uso como tipo
+```typescript
+// Ambos funcionam ANTES e DEPOIS:
+
+// Uso 1: Parameter annotation
+function handleError(error: ApiError) {
+  console.log(error.status)     // ✅ OK
+  console.log(error.message)    // ✅ OK (de Error)
+  console.log(error.detail)     // ✅ OK (pode ser undefined)
+}
+
+// Uso 2: Return type annotation
+function createError(msg: string, code: number): ApiError {
+  return new ApiError(msg, code)  // ✅ OK
+}
+
+// Uso 3: Variable annotation
+const err: ApiError = new ApiError('Test', 500)  // ✅ OK
+
+// Uso 4: Array type
+const errors: ApiError[] = [
+  new ApiError('Not found', 404),
+  new ApiError('Unauthorized', 401)
+]  // ✅ OK
+
+// Uso 5: Generic constraint
+function logError<T extends ApiError>(error: T) {
+  console.log(error.status)  // ✅ OK
+}
+```
+
+**Conclusão:** Todos os usos de `ApiError` como **tipo** continuam funcionando porque classe é tipo estrutural.
+
+---
+
+### 📚 Exemplo 5: Runtime Checks Funcionam
+
+#### Exemplo (não aplicar) — instanceof e throw
+```typescript
+// Runtime operations (ANTES e DEPOIS):
+
+// Check 1: instanceof
+try {
+  throw new ApiError('Server error', 500)
+} catch (e) {
+  if (e instanceof ApiError) {  // ✅ true
+    console.log('API error:', e.status)
+  } else if (e instanceof Error) {
+    console.log('Generic error:', e.message)
+  }
+}
+
+// Check 2: Error boundary (React)
+class ErrorBoundary extends Component {
+  componentDidCatch(error: Error) {
+    if (error instanceof ApiError) {  // ✅ Works
+      this.setState({ apiError: error.status })
+    }
+  }
+}
+
+// Check 3: Type guard
+function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError  // ✅ Best practice
+}
+
+// ❌ EVITAR (type guard manual - frágil):
+function isApiErrorManual(error: unknown): error is ApiError {
+  return typeof error === 'object' &&
+         error !== null &&
+         'status' in error &&
+         'detail' in error
+  // Problema: Qualquer objeto com status + detail passa
+}
+```
+
+---
+
+### 📚 Exemplo 6: IntelliSense ANTES vs DEPOIS
+
+#### Exemplo (não aplicar) — Experiência do desenvolvedor
+
+**ANTES (confuso):**
+```typescript
+import { ApiError } from '@/services/api'
+//      ^^^^^^^^
+//      Hover mostra:
+//      
+//      (interface) ApiError
+//      Interface with: message, status, detail
+//      
+//      (class) ApiError
+//      Class that extends Error
+//      
+//      🤔 Qual usar? Duas definições!
+```
+
+**DEPOIS (claro):**
+```typescript
+import { ApiError } from '@/services/api'
+//      ^^^^^^^^
+//      Hover mostra:
+//      
+//      (class) ApiError extends Error
+//      Constructor(message: string, status: number, detail?: string)
+//      Properties: status, detail (+ inherited: message, name, stack)
+//      
+//      ✅ Apenas uma definição! Claro e objetivo.
+```
+
+---
+
+### 📚 Exemplo 7: Diff Esperado (git diff)
+
+#### Exemplo (não aplicar) — Output de `git diff`
+```diff
+diff --git a/src/services/api.ts b/src/services/api.ts
+index a1b2c3d..e4f5g6h 100644
+--- a/src/services/api.ts
++++ b/src/services/api.ts
+@@ -7,13 +7,7 @@ export interface ApiResponse<T> {
+     ok: boolean;
+ }
+ 
+-export interface ApiError {
+-    message: string;
+-    status: number;
+-    detail?: string;
+-}
+-
+-class ApiError extends Error {
++export class ApiError extends Error {
+     status: number;
+     detail?: string;
+ 
+```
+
+**Análise do diff:**
+- ✅ Linhas removidas: 5 (interface completa)
+- ✅ Linhas adicionadas: 1 (`export` antes de `class`)
+- ✅ Net reduction: -4 linhas (código mais enxuto)
+
+---
+
+### 📚 Exemplo 8: Buscar Usos de ApiError (grep)
+
+#### Exemplo (não aplicar) — Comandos de verificação
+```bash
+# Buscar imports de ApiError
+grep -r "import.*ApiError" src/ --include="*.ts" --include="*.tsx"
+
+# Resultado típico:
+# src/services/auth.ts: import { api, ApiError } from './api'
+# src/components/auth/LoginForm.tsx: import { ApiError } from '@/services/api'
+# src/contexts/AuthContext.tsx: import { ApiError } from '@/services/api'
+
+# Buscar usos como tipo
+grep -r ": ApiError" src/ --include="*.ts" --include="*.tsx"
+
+# Buscar instanceof checks
+grep -r "instanceof ApiError" src/ --include="*.ts" --include="*.tsx"
+
+# Buscar throws
+grep -r "throw new ApiError" src/ --include="*.ts" --include="*.tsx"
+
+# Buscar extends (se houver subclasses)
+grep -r "extends ApiError" src/ --include="*.ts" --include="*.tsx"
+# Resultado esperado: NENHUM (não há subclasses)
+```
+
+---
+
+### 📚 Exemplo 9: TypeScript Handbook Reference
+
+#### Exemplo (não aplicar) — Classes são tipos
+```typescript
+// TypeScript Handbook: Classes
+// https://www.typescriptlang.org/docs/handbook/2/classes.html
+
+// "Classes in TypeScript are both types and values."
+
+class Point {
+  x: number;
+  y: number;
+  
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+  }
+}
+
+// Usage as TYPE:
+function distance(p1: Point, p2: Point): number {  // ← Type
+  return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+}
+
+// Usage as VALUE:
+const origin = new Point(0, 0)  // ← Value (constructor)
+
+// No need for separate interface:
+// interface Point { x: number; y: number }  ← Redundante!
+```
+
+**Aplicado ao nosso caso:**
+- `ApiError` class já é tipo estrutural
+- Pode ser usada em annotations: `error: ApiError`
+- Pode ser instanciada: `new ApiError(...)`
+- Interface separada é desnecessária
+
+---
+
+### 📚 Exemplo 10: Checklist de Validação Rápida
+
+#### Exemplo (não aplicar) — Quick smoke test
+```bash
+# 1. TypeScript OK?
+npx tsc --noEmit && echo "✅ TS clean" || echo "❌ TS error"
+
+# 2. Frontend OK?
+npm run dev &
+sleep 5
+curl -s http://localhost:5173 > /dev/null && echo "✅ Frontend up" || echo "❌ Frontend down"
+kill %1
+
+# 3. Build OK?
+npm run build && echo "✅ Build success" || echo "❌ Build failed"
+
+# 4. Grep check (nenhum uso de interface ApiError)
+grep -r "interface ApiError" src/ && echo "❌ Interface ainda existe" || echo "✅ Interface removida"
+
+# 5. Export check (classe é exportada)
+grep "export class ApiError" src/services/api.ts && echo "✅ Export OK" || echo "❌ Export missing"
+```
+
+---
+
+**Status da Documentação:** ✅ PRONTO PARA REVISÃO
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- CORREÇÃO #6 - FIM -->
