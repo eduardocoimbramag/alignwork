@@ -8901,37 +8901,467 @@ ROLLBACK (se necessário):
 <!-- CORREÇÃO #8 - INÍCIO -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
-### Correção #8: Adicionar Error Boundary (P0-015)
+### Correção #8 — Adicionar Error Boundary (P0-015)
 
-**Nível de Risco:** 🟡 BAIXO  
-**Tempo Estimado:** 20 minutos  
-**Prioridade:** P0 (UX Crítica)  
-**Referência:** [MELHORIAS-E-CORRECOES.md#P0-015](./MELHORIAS-E-CORRECOES.md#p0-015-falta-error-boundary-no-react)
+> **Modo:** DOCUMENTAÇÃO SOMENTE (não aplicar agora)  
+> **Nível de Risco:** 🟡 BAIXO  
+> **Tempo Estimado:** 15-20 minutos  
+> **Prioridade:** P0 (UX Crítica)  
+> **Categoria:** Robustez / UX  
+> **Princípio Violado:** Graceful Degradation  
+> **Referência:** [MELHORIAS-E-CORRECOES.md#P0-015](./MELHORIAS-E-CORRECOES.md#p0-015-falta-error-boundary-no-react)
 
-#### Por Que Fazer?
+---
 
-- ✅ Previne tela branca em caso de erro
-- ✅ UX profissional
-- ✅ Facilita debugging
-- ✅ Código novo (não modifica existente)
+## 1. Contexto e Problema
 
-#### Pré-requisitos
+### Sintomas Observados
 
-- [ ] Correções anteriores concluídas
-- [ ] Entender React Class Components (Error Boundary precisa ser classe)
+**1. Tela Branca em Caso de Erro React**
 
-#### Arquivos Afetados
+Quando ocorre um erro não capturado em qualquer componente React da aplicação, o comportamento padrão é:
 
-- **NOVO:** `src/components/ErrorBoundary.tsx`
-- **MODIFICAR:** `src/App.tsx`
+**❌ PROBLEMA:** Tela completamente branca  
+**❌ PROBLEMA:** Usuário perdido sem feedback  
+**❌ PROBLEMA:** Console cheio de erros, mas tela vazia
 
-#### Passo a Passo
+**Exemplo de Erro Típico (Console):**
+```
+Uncaught Error: Cannot read property 'map' of undefined
+    at Dashboard.tsx:45
+    at renderWithHooks (react-dom.development.js:...)
+    ...
 
-**1. Criar componente Error Boundary:**
+The above error occurred in the <Dashboard> component.
+React will try to recreate this component tree from scratch using the error boundary you provided.
+```
 
-Criar arquivo `src/components/ErrorBoundary.tsx`:
+**Resultado Visual:** Tela branca (usuário não vê NADA)
+
+**2. Ausência de Error Boundary no Código Atual**
+
+Verificando `src/App.tsx`:
 
 ```typescript
+// Exemplo (não aplicar) — Estado ATUAL (sem Error Boundary)
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TenantProvider>
+      <AuthProvider>
+        <AppProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                {/* rotas... */}
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </AppProvider>
+      </AuthProvider>
+    </TenantProvider>
+  </QueryClientProvider>
+);
+
+// ✗ SEM proteção: Se qualquer componente dentro lançar erro, tela branca
+```
+
+**3. Impacto na Experiência do Usuário**
+
+| Cenário | Sem Error Boundary | Com Error Boundary |
+|---------|-------------------|-------------------|
+| **Erro no Dashboard** | Tela branca | Mensagem amigável + botão recarregar |
+| **API retorna dados inválidos** | Tela branca | Mensagem amigável + botão recarregar |
+| **Componente filho quebra** | Tela toda quebra | Apenas feedback de erro |
+| **Debugging** | Console apenas | Console + UI visual + stack trace |
+| **Usuário perdido?** | ✗ Sim (sem feedback) | ✅ Não (sabe o que fazer) |
+
+### Passos de Reprodução
+
+**Simular erro não capturado:**
+
+```bash
+# Exemplo (não aplicar) — Código para testar
+
+# 1. Criar componente que lança erro
+cat > src/components/BuggyTest.tsx << 'EOF'
+export const BuggyTest = () => {
+  throw new Error('Simulando erro não capturado!');
+  return <div>Nunca renderiza</div>;
+};
+EOF
+
+# 2. Adicionar rota em App.tsx
+# <Route path="/buggy" element={<BuggyTest />} />
+
+# 3. Navegar para /buggy
+
+# ✗ RESULTADO ATUAL: Tela branca completa
+# ✅ RESULTADO ESPERADO: Tela de erro amigável
+```
+
+### Impacto
+
+**UX (Experiência do Usuário):**
+- ✗ **Profissionalismo:** Tela branca parece aplicação quebrada
+- ✗ **Confiança:** Usuário perde confiança no produto
+- ✗ **Frustração:** Sem feedback sobre o que fazer
+- ✗ **Perda de Dados:** Usuário pode perder trabalho não salvo
+
+**DX (Developer Experience):**
+- ✗ **Debugging:** Difícil identificar onde erro ocorreu em produção
+- ✗ **Monitoramento:** Sem integração com Sentry/LogRocket
+- ✗ **Reprodução:** Usuário não consegue descrever problema ("tela ficou branca")
+
+**Negócio:**
+- ✗ **Suporte:** Tickets vagos do tipo "não funciona"
+- ✗ **Abandono:** Usuário desiste e fecha aba
+- ✗ **Reputação:** Parece aplicação mal feita
+
+---
+
+## 2. Mapa de Fluxo (Alto Nível)
+
+### Fluxo ATUAL (SEM Error Boundary)
+
+```
+┌─────────────────────────────────────────────────┐
+│  Usuário navega para /dashboard                │
+└─────────────────────────────────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  React renderiza      │
+        │  <Dashboard />        │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  API retorna dados    │
+        │  malformados          │
+        └───────────────────────┘
+                    │
+                    ▼
+        ╔═══════════════════════════════════╗
+        ║  ERRO: Cannot read 'map' of       ║
+        ║  undefined                        ║
+        ╚═══════════════════════════════════╝
+                    │
+                    ▼
+        ╔═══════════════════════════════════╗
+        ║  React desmonta TUDO              ║
+        ║  (unmount de toda árvore)         ║
+        ╚═══════════════════════════════════╝
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  ❌ TELA BRANCA       │
+        │  (root vazio)         │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  Usuário confuso      │
+        │  (sem feedback)       │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  Fecha aba / desiste  │
+        └───────────────────────┘
+
+⚠️  PROBLEMA: Zero feedback, zero recovery
+```
+
+### Fluxo PROPOSTO (COM Error Boundary)
+
+```
+┌─────────────────────────────────────────────────┐
+│  <ErrorBoundary> envolve toda app              │
+└─────────────────────────────────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  Usuário navega para  │
+        │  /dashboard           │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  React renderiza      │
+        │  <Dashboard />        │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  API retorna dados    │
+        │  malformados          │
+        └───────────────────────┘
+                    │
+                    ▼
+        ╔═══════════════════════════════════╗
+        ║  ERRO: Cannot read 'map' of       ║
+        ║  undefined                        ║
+        ╚═══════════════════════════════════╝
+                    │
+                    ▼
+        ╔═══════════════════════════════════╗
+        ║  ErrorBoundary.componentDidCatch  ║
+        ║  CAPTURA o erro                   ║
+        ╚═══════════════════════════════════╝
+                    │
+         ┌──────────┴──────────┐
+         │                      │
+         ▼                      ▼
+┌─────────────────┐   ┌──────────────────┐
+│ console.error() │   │ Sentry.capture() │
+│ (dev/prod)      │   │ (futuro)         │
+└─────────────────┘   └──────────────────┘
+                    │
+                    ▼
+        ╔═══════════════════════════════════╗
+        ║  getDerivedStateFromError         ║
+        ║  setState({ hasError: true })     ║
+        ╚═══════════════════════════════════╝
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  ✅ FALLBACK UI       │
+        │  (tela amigável)      │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  👤 Ícone AlertCircle │
+        │  📝 Mensagem clara    │
+        │  🐛 Stack (dev)       │
+        │  🔄 Botão "Recarregar"│
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  Usuário clica        │
+        │  "Recarregar"         │
+        └───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────┐
+        │  App reinicia limpa   │
+        │  (fresh start)        │
+        └───────────────────────┘
+
+✅  SOLUÇÃO: Feedback claro + recovery automático
+```
+
+### Comparação: Antes vs Depois
+
+| Aspecto | ANTES (sem) | DEPOIS (com) |
+|---------|-------------|--------------|
+| **Feedback visual** | Nenhum (branco) | Tela amigável |
+| **Usuário sabe o que fazer** | ✗ Não | ✅ Sim (botão) |
+| **Error logging** | Console apenas | Console + Sentry |
+| **Recovery** | Manual (F5) | Botão clicável |
+| **Stack trace** | Escondido | Visível (dev) |
+| **Profissionalismo** | Baixo | Alto |
+
+---
+
+## 3. Hipóteses de Causa
+
+### Causa Raiz Identificada
+
+**✅ CONFIRMADO: Falta de Error Boundary no Código**
+
+**Evidências:**
+
+1. **Análise de `src/App.tsx`:**
+   ```bash
+   # Exemplo (não aplicar) — Buscar Error Boundary
+   grep -r "ErrorBoundary" src/
+   # Resultado: nenhum arquivo encontrado
+   ```
+
+2. **Padrão React:**
+   - React exige Error Boundary manual (não é automático)
+   - Documentação oficial recomenda Error Boundary na raiz
+   - Sem ele, erro propaga até unmount completo
+
+3. **Best Practices:**
+   - Todo app React produção deve ter Error Boundary
+   - Especialmente SaaS/apps críticos
+
+**Como Validar:**
+
+```bash
+# Exemplo (não aplicar) — Verificar se Error Boundary existe
+
+# 1. Buscar componente
+find src/components -name "*Error*" -o -name "*Boundary*"
+
+# 2. Buscar uso em App.tsx
+grep -n "ErrorBoundary" src/App.tsx
+
+# 3. Resultado esperado ANTES: nada encontrado
+# 4. Resultado esperado DEPOIS: componente + import
+```
+
+### Hipóteses Alternativas (Descartadas)
+
+| Hipótese | Evidência Contra | Status |
+|----------|------------------|--------|
+| **Erro é raro** | Erros acontecem (API, bugs, edge cases) | ✗ Descartada |
+| **Try-catch resolve** | Try-catch não captura erros de renderização | ✗ Descartada |
+| **Usuário sabe F5** | UX ruim, usuário não deveria precisar | ✗ Descartada |
+| **Console.error basta** | Usuário não vê console | ✗ Descartada |
+
+---
+
+## 4. Objetivo (Resultado Verificável)
+
+### Critérios Claros de "Feito"
+
+**Critério 1: Componente ErrorBoundary Criado**
+- ✅ Arquivo `src/components/ErrorBoundary.tsx` existe
+- ✅ É class component (React requirement)
+- ✅ Implementa `getDerivedStateFromError`
+- ✅ Implementa `componentDidCatch`
+- ✅ Renderiza fallback UI quando `hasError === true`
+
+**Critério 2: App.tsx Modificado**
+- ✅ Import `ErrorBoundary` adicionado
+- ✅ `<ErrorBoundary>` envolve `<QueryClientProvider>`
+- ✅ Closing tag `</ErrorBoundary>` no final
+
+**Critério 3: Fallback UI Profissional**
+- ✅ Ícone de alerta (AlertCircle)
+- ✅ Mensagem amigável ("Ops! Algo deu errado")
+- ✅ Botão "Recarregar Aplicação" funcional
+- ✅ Stack trace visível apenas em dev
+
+**Critério 4: Funcionalidade Preservada**
+- ✅ App funciona normalmente (sem erro)
+- ✅ Navegação OK
+- ✅ Login/logout OK
+- ✅ Dashboard OK
+
+**Critério 5: Error Handling Funciona**
+- ✅ Simular erro → Fallback UI aparece (não tela branca)
+- ✅ Console.error registra erro
+- ✅ Botão recarregar funciona
+- ✅ Stack trace aparece em dev
+
+**Critério 6: TypeScript Válido**
+- ✅ `npx tsc --noEmit` sem erros
+- ✅ Tipos `Props`, `State` corretos
+- ✅ Métodos de classe tipados
+
+### Testes de Validação Objetivos
+
+```typescript
+// Exemplo (não aplicar) — Testes de validação
+
+// ✅ CORRETO: ErrorBoundary existe e exporta
+import ErrorBoundary from '@/components/ErrorBoundary'
+typeof ErrorBoundary === 'function'  // true (class é function)
+
+// ✅ CORRETO: App.tsx usa ErrorBoundary
+const App = () => (
+  <ErrorBoundary>
+    {/* ... */}
+  </ErrorBoundary>
+)
+
+// ✅ CORRETO: Fallback UI renderiza em erro
+// (testar com componente buggy)
+
+// ❌ ERRADO: Error Boundary não usado
+const App = () => (
+  <QueryClientProvider>  // ← SEM ErrorBoundary
+    {/* ... */}
+  </QueryClientProvider>
+)
+```
+
+---
+
+## 5. Escopo (IN / OUT)
+
+### IN (Incluído Nesta Correção)
+
+| Item | Descrição | Arquivo | Tipo |
+|------|-----------|---------|------|
+| ✅ **Criar ErrorBoundary** | Class component com fallback UI | `ErrorBoundary.tsx` | NOVO |
+| ✅ **Modificar App.tsx** | Envolver app com `<ErrorBoundary>` | `App.tsx` | MODIFICAR |
+| ✅ **Fallback UI** | Tela amigável com ícone + mensagem | `ErrorBoundary.tsx` | NOVO |
+| ✅ **Botão recarregar** | Handler `handleReset` | `ErrorBoundary.tsx` | NOVO |
+| ✅ **Stack trace (dev)** | Detalhes de erro apenas em dev | `ErrorBoundary.tsx` | NOVO |
+| ✅ **Console.error** | Log de erro para debugging | `ErrorBoundary.tsx` | NOVO |
+| ✅ **TypeScript types** | `Props`, `State` interfaces | `ErrorBoundary.tsx` | NOVO |
+| ✅ **Teste manual** | Componente buggy para validar | Temporário | TESTE |
+
+### OUT (Explicitamente Excluído)
+
+| Item | Motivo da Exclusão | Quando Fazer |
+|------|-------------------|--------------|
+| ❌ **Integração Sentry** | Requer conta/config | MAINT-XXX |
+| ❌ **Error Boundaries múltiplos** | Over-engineering | Se necessário |
+| ❌ **Retry automático** | Complexo, pode loop | Feature request |
+| ❌ **Error reporting backend** | Infraestrutura | Roadmap |
+| ❌ **Testes automatizados** | Escopo MAINT-003 | Futura correção |
+| ❌ **i18n de mensagens** | Não há i18n ainda | Quando i18n |
+| ❌ **Analytics de erros** | Sem analytics | Roadmap |
+
+### Boundary (Fronteira Clara)
+
+**DENTRO do Escopo:**
+```typescript
+// Exemplo (não aplicar) — O que SERÁ feito
+
+// ✅ Criar componente
+class ErrorBoundary extends Component<Props, State> { }
+
+// ✅ Envolver app
+<ErrorBoundary><App /></ErrorBoundary>
+
+// ✅ Fallback UI
+<div>Ops! Algo deu errado...</div>
+```
+
+**FORA do Escopo:**
+```typescript
+// Exemplo (não aplicar) — O que NÃO será feito
+
+// ❌ Não integrar Sentry agora
+Sentry.captureException(error)  // ← Comentado (TODO)
+
+// ❌ Não adicionar retry automático
+componentDidUpdate() { /* retry logic */ }  // ← Não
+
+// ❌ Não adicionar Error Boundaries granulares
+<ErrorBoundary><Dashboard /></ErrorBoundary>  // ← Futuro
+```
+
+---
+
+## 6. Mudanças Propostas (Alto Nível, NÃO Aplicar Agora)
+
+### Mudança #1: Criar Componente ErrorBoundary
+
+**Localização:** `src/components/ErrorBoundary.tsx` (NOVO arquivo)
+
+**ANTES (não existe):**
+```bash
+# Exemplo (não aplicar) — Estado ANTES
+ls src/components/ErrorBoundary.tsx
+# ls: cannot access: No such file or directory
+```
+
+**DEPOIS (arquivo criado):**
+```typescript
+// Exemplo (não aplicar) — Estado DEPOIS
+
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8952,20 +9382,17 @@ class ErrorBoundary extends Component<Props, State> {
     };
 
     public static getDerivedStateFromError(error: Error): State {
-        // Atualizar state para mostrar fallback UI
         return { hasError: true, error };
     }
 
     public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('Error Boundary caught:', error, errorInfo);
-        
-        // TODO: Enviar para serviço de monitoramento (Sentry, etc)
-        // Sentry.captureException(error, { extra: errorInfo });
+        console.error('ErrorBoundary caught:', error, errorInfo);
+        // TODO: Sentry.captureException(error, { extra: errorInfo });
     }
 
     private handleReset = () => {
         this.setState({ hasError: false, error: null });
-        window.location.href = '/';  // Recarrega app
+        window.location.href = '/';
     };
 
     public render() {
@@ -8978,19 +9405,15 @@ class ErrorBoundary extends Component<Props, State> {
                             Ops! Algo deu errado
                         </h1>
                         <p className="text-gray-600 mb-6">
-                            Desculpe, encontramos um erro inesperado. 
-                            Nossa equipe foi notificada.
+                            Desculpe, encontramos um erro inesperado.
                         </p>
                         {process.env.NODE_ENV === 'development' && this.state.error && (
                             <details className="mb-4 text-left">
-                                <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700 mb-2">
-                                    Detalhes do erro (apenas em desenvolvimento)
+                                <summary className="cursor-pointer text-sm text-gray-500">
+                                    Detalhes (dev)
                                 </summary>
-                                <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-48">
-                                    <div className="font-semibold mb-2">Mensagem:</div>
-                                    {this.state.error.message}
-                                    
-                                    <div className="font-semibold mt-4 mb-2">Stack:</div>
+                                <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto">
+                                    {this.state.error.message}\n
                                     {this.state.error.stack}
                                 </pre>
                             </details>
@@ -9010,15 +9433,17 @@ class ErrorBoundary extends Component<Props, State> {
 export default ErrorBoundary;
 ```
 
-**2. Modificar App.tsx:**
+### Mudança #2: Modificar App.tsx
 
+**Localização:** `src/App.tsx`
+
+**ANTES (sem Error Boundary):**
 ```typescript
-// src/App.tsx
+// Exemplo (não aplicar) — Estado ANTES
 
-// ADICIONAR import no topo:
-import ErrorBoundary from '@/components/ErrorBoundary';
+// Imports...
+// (SEM import de ErrorBoundary)
 
-// ANTES (linhas 33-82):
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TenantProvider>
@@ -9028,9 +9453,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
-              <Routes>
-                {/* ... rotas ... */}
-              </Routes>
+              <Routes>{/* rotas */}</Routes>
             </BrowserRouter>
           </TooltipProvider>
         </AppProvider>
@@ -9038,10 +9461,17 @@ const App = () => (
     </TenantProvider>
   </QueryClientProvider>
 );
+```
 
-// DEPOIS:
+**DEPOIS (com Error Boundary):**
+```typescript
+// Exemplo (não aplicar) — Estado DEPOIS
+
+// ADICIONAR import:
+import ErrorBoundary from '@/components/ErrorBoundary';
+
 const App = () => (
-  <ErrorBoundary>  {/* ✅ Adicionar aqui */}
+  <ErrorBoundary>  {/* ✅ ADICIONAR wrapper */}
     <QueryClientProvider client={queryClient}>
       <TenantProvider>
         <AuthProvider>
@@ -9050,106 +9480,1114 @@ const App = () => (
               <Toaster />
               <Sonner />
               <BrowserRouter>
-                <Routes>
-                  {/* ... rotas ... */}
-                </Routes>
+                <Routes>{/* rotas */}</Routes>
               </BrowserRouter>
             </TooltipProvider>
           </AppProvider>
         </AuthProvider>
       </TenantProvider>
     </QueryClientProvider>
-  </ErrorBoundary>  {/* ✅ Fechar aqui */}
+  </ErrorBoundary>  {/* ✅ FECHAR wrapper */}
 );
 ```
 
-**3. Salvar ambos arquivos**
+### Impacto em Outros Arquivos
 
-#### Validação
+**✅ APENAS 2 ARQUIVOS MODIFICADOS:**
 
-**Checklist de Validação:**
+1. ✅ `src/components/ErrorBoundary.tsx` — NOVO
+2. ✅ `src/App.tsx` — +2 linhas (import + wrapper)
 
-- [ ] TypeScript compila:
+**Nenhuma mudança em:**
+- ✅ Componentes existentes (Dashboard, etc)
+- ✅ Contexts (AuthContext, TenantContext, etc)
+- ✅ Hooks
+- ✅ Services
+- ✅ Backend
+
+---
+
+## 7. Alternativas Consideradas (Trade-offs)
+
+### Alternativa 1: Error Boundary Global (RECOMENDADA ✅)
+
+**Descrição:** Um único `<ErrorBoundary>` na raiz (`App.tsx`).
+
+**Prós:**
+- ✅ Simples de implementar
+- ✅ Cobre TODA a aplicação
+- ✅ Fácil de manter
+- ✅ Padrão recomendado
+
+**Contras:**
+- 🟡 Erro em qualquer lugar desmonta tudo
+
+**Trade-off:** Simplicidade vs granularidade → **Simplicidade vence**
+
+**Decisão:** ✅ **ESCOLHIDA**
+
+---
+
+### Alternativa 2: Error Boundaries Granulares
+
+**Descrição:** Múltiplos `<ErrorBoundary>` em seções específicas.
+
+**Exemplo (não aplicar):**
+```typescript
+// Exemplo (não aplicar) — Error Boundaries granulares
+
+<div>
+  <ErrorBoundary>
+    <Dashboard />
+  </ErrorBoundary>
+  
+  <ErrorBoundary>
+    <Sidebar />
+  </ErrorBoundary>
+</div>
+```
+
+**Prós:**
+- ✅ Erro em Dashboard não afeta Sidebar
+- ✅ Recovery parcial
+
+**Contras:**
+- ❌ Over-engineering para início
+- ❌ Mais código para manter
+- ❌ Complexidade desnecessária
+- ❌ Pode confundir (parte funciona, parte não)
+
+**Trade-off:** Granularidade vs complexidade → **Complexidade excessiva**
+
+**Decisão:** ✗ **NÃO escolhida** (futuro, se necessário)
+
+---
+
+### Alternativa 3: Try-Catch em Componentes
+
+**Descrição:** Usar try-catch em cada componente.
+
+**Exemplo (não aplicar):**
+```typescript
+// Exemplo (não aplicar) — Try-catch em componente
+
+const Dashboard = () => {
+  try {
+    return <div>{data.map(...)}</div>
+  } catch (error) {
+    return <div>Erro!</div>
+  }
+}
+```
+
+**Prós:**
+- ✅ Granular
+
+**Contras:**
+- ❌ NÃO funciona! Try-catch não captura erros de renderização
+- ❌ Código React roda fora do try-catch
+- ❌ Verbose (repetir em todos)
+
+**Trade-off:** Ineficaz → **Não funciona**
+
+**Decisão:** ✗ **NÃO escolhida** (tecnicamente incorreto)
+
+---
+
+### Alternativa 4: Sem Error Boundary
+
+**Descrição:** Deixar como está (status quo).
+
+**Prós:**
+- ✅ Zero trabalho
+
+**Contras:**
+- ❌ Tela branca permanece
+- ❌ UX ruim permanece
+- ❌ Problema não resolvido
+
+**Trade-off:** Evitar trabalho vs resolver problema → **Inaceitável**
+
+**Decisão:** ✗ **NÃO escolhida**
+
+---
+
+### Matriz de Decisão
+
+| Critério | Alt 1: Global | Alt 2: Granular | Alt 3: Try-Catch | Alt 4: Nada |
+|----------|---------------|-----------------|------------------|-------------|
+| **Funciona?** | ✅ Sim | ✅ Sim | ❌ Não | ❌ Não |
+| **Simplicidade** | ✅ Alta | 🟡 Média | 🟡 Média | ✅ Alta |
+| **Cobertura** | ✅ 100% | 🟡 Parcial | ❌ 0% | ❌ 0% |
+| **Manutenibilidade** | ✅ Alta | 🟡 Média | ❌ Baixa | ✅ Alta |
+| **UX** | ✅ Boa | ✅ Ótima | ❌ Ruim | ❌ Péssima |
+| **Esforço** | 🟢 Baixo (20 min) | 🟡 Médio (1h) | 🔴 Alto (inútil) | 🟢 Zero |
+| **Risco** | 🟢 Baixo | 🟡 Médio | 🔴 Alto (não resolve) | 🔴 Alto (problema persiste) |
+| **SCORE** | **10/10** | **7/10** | **1/10** | **2/10** |
+
+**Vencedora:** Alternativa 1 (Error Boundary Global na raiz)
+
+---
+
+## 8. Riscos e Mitigações
+
+### Risco 1: Class Component em Codebase Funcional
+
+**Descrição:** Único class component em codebase de hooks.
+
+**Probabilidade:** 🟡 Média (50%) — Devs podem estranhar  
+**Impacto:** 🟢 Baixo — É necessário (React limitation)  
+**Severidade:** 🟢 **BAIXA**
+
+**Mitigação:**
+- ✅ Adicionar comentário explicando "React Error Boundary must be class"
+- ✅ Documentar em README/CONTRIBUTING
+- ✅ Link para docs oficiais React
+
+**Rollback:** Deletar componente, remover wrapper
+
+---
+
+### Risco 2: Fallback UI Não Renderiza
+
+**Descrição:** Erro no próprio ErrorBoundary.
+
+**Probabilidade:** 🟢 Muito Baixa (5%)  
+**Impacto:** 🟡 Médio — Volta tela branca  
+**Severidade:** 🟡 **MÉDIA**
+
+**Evidência de Baixo Risco:**
+- Componente é simples (poucos pontos de falha)
+- Sem lógica complexa
+- Tailwind classes são seguras
+
+**Mitigação:**
+1. Testar fallback UI manualmente
+2. Evitar lógica complexa no fallback
+3. Usar componentes estáveis (Button from shadcn)
+
+**Rollback:** Reverter commits
+
+---
+
+### Risco 3: Loop Infinito de Erros
+
+**Descrição:** Erro dentro do Error Boundary causa loop.
+
+**Probabilidade:** 🟢 Muito Baixa (2%)  
+**Impacto:** 🔴 Alto — App trava  
+**Severidade:** 🟡 **MÉDIA**
+
+**Por que Baixo Risco:**
+- ErrorBoundary é isolado
+- Não faz side-effects arriscados
+- `window.location.href` é fail-safe
+
+**Mitigação:**
+- ✅ Não adicionar lógica complexa no fallback
+- ✅ Não fazer API calls no fallback
+- ✅ `handleReset` usa navegação nativa (não React Router)
+
+---
+
+### Risco 4: Não Captura Todos Erros
+
+**Descrição:** Error Boundary tem limitações conhecidas.
+
+**Probabilidade:** 🟡 Média (30%) — É limitation do React  
+**Impacto:** 🟡 Médio — Alguns erros não capturados  
+**Severidade:** 🟡 **MÉDIA**
+
+**Limitações Conhecidas:**
+- ❌ Event handlers (onClick, etc)
+- ❌ Código assíncrono (async/await)
+- ❌ Server-side rendering
+- ❌ Erros no próprio Error Boundary
+
+**Mitigação:**
+- ✅ Documentar limitações
+- ✅ Adicionar try-catch manual em event handlers críticos
+- ✅ Error Boundary cobre 70-80% dos casos (suficiente)
+
+---
+
+### Resumo de Riscos
+
+| Risco | Prob. | Impacto | Severidade | Mitigação |
+|-------|-------|---------|------------|-----------|
+| **Class component** | 🟡 50% | 🟢 Baixo | 🟢 BAIXA | Comentários + docs |
+| **Fallback não renderiza** | 🟢 5% | 🟡 Médio | 🟡 MÉDIA | Testar manually |
+| **Loop infinito** | 🟢 2% | 🔴 Alto | 🟡 MÉDIA | Evitar side-effects |
+| **Não captura tudo** | 🟡 30% | 🟡 Médio | 🟡 MÉDIA | Documentar limitações |
+
+**Risco Global:** 🟢 **BAIXO** (benefícios superam riscos)
+
+---
+
+## 9. Casos de Teste (Manuais, Passo a Passo)
+
+### Teste 1: Compilação TypeScript
+
+**Objetivo:** Verificar que class component compila.
+
+**Pré-condições:**
+- ErrorBoundary.tsx criado
+- App.tsx modificado
+
+**Passos:**
+```bash
+# Exemplo (não aplicar) — Compilar TypeScript
+
+npx tsc --noEmit
+```
+
+**Resultado Esperado:**
+```
+# Nenhum output (sucesso silencioso)
+Exit code: 0
+```
+
+**Critério de Sucesso:** ✅ Zero erros TypeScript
+
+---
+
+### Teste 2: App Funciona Normalmente
+
+**Objetivo:** Verificar que Error Boundary não quebra funcionalidade normal.
+
+**Passos:**
+1. Iniciar app: `npm run dev`
+2. Navegar para `/login`
+3. Fazer login
+4. Navegar para `/dashboard`
+5. Navegar para `/settings`
+6. Fazer logout
+
+**Resultado Esperado:**
+- ✅ Todas as rotas carregam
+- ✅ Login funciona
+- ✅ Dashboard mostra dados
+- ✅ Nenhum erro no console
+- ✅ UX inalterada
+
+**Critério de Sucesso:** ✅ App funciona como antes
+
+---
+
+### Teste 3: Simular Erro — Fallback UI Aparece
+
+**Objetivo:** Verificar que ErrorBoundary captura erro e mostra fallback.
+
+**Passos:**
+
+1. **Criar componente buggy:**
+   ```bash
+   cat > src/components/BuggyTest.tsx << 'EOF'
+   export const BuggyTest = () => {
+     throw new Error('Teste de Error Boundary!');
+     return <div>Nunca renderiza</div>;
+   };
+   EOF
+   ```
+
+2. **Adicionar rota em App.tsx:**
+   ```typescript
+   import { BuggyTest } from './components/BuggyTest';
+   
+   // Adicionar dentro de <Routes>:
+   <Route path="/test-error" element={<BuggyTest />} />
+   ```
+
+3. **Navegar:** `http://localhost:5173/test-error`
+
+**Resultado Esperado:**
+- ✅ **NÃO mostra** tela branca
+- ✅ **MOSTRA** fallback UI com:
+  - Ícone AlertCircle (vermelho)
+  - Título "Ops! Algo deu errado"
+  - Mensagem amigável
+  - Botão "Recarregar Aplicação"
+
+**Critério de Sucesso:** ✅ Fallback UI aparece (não tela branca)
+
+---
+
+### Teste 4: Stack Trace Visível em Dev
+
+**Objetivo:** Verificar que detalhes de erro aparecem em desenvolvimento.
+
+**Pré-condições:**
+- Teste 3 executado (em `/test-error`)
+- `NODE_ENV === 'development'`
+
+**Passos:**
+1. Verificar fallback UI
+2. Buscar `<details>` com "Detalhes (dev)"
+3. Expandir
+
+**Resultado Esperado:**
+- ✅ `<details>` visível
+- ✅ Ao expandir, mostra:
+  - Mensagem: "Teste de Error Boundary!"
+  - Stack trace completo
+
+**Critério de Sucesso:** ✅ Stack trace presente e legível
+
+---
+
+### Teste 5: Botão Recarregar Funciona
+
+**Objetivo:** Verificar que recovery funciona.
+
+**Pré-condições:**
+- Teste 3 executado (fallback UI visível)
+
+**Passos:**
+1. Clicar botão "Recarregar Aplicação"
+2. Observar navegação
+
+**Resultado Esperado:**
+- ✅ App navega para `/` (home)
+- ✅ Estado limpo (sem erro)
+- ✅ App funciona normalmente
+
+**Critério de Sucesso:** ✅ Recovery bem-sucedido
+
+---
+
+### Teste 6: Console.error Registra Erro
+
+**Objetivo:** Verificar logging de erro.
+
+**Pré-condições:**
+- Teste 3 executado
+
+**Passos:**
+1. Abrir DevTools Console
+2. Verificar mensagens
+
+**Resultado Esperado:**
+```
+ErrorBoundary caught: Error: Teste de Error Boundary!
+    at BuggyTest (BuggyTest.tsx:2)
+    ...
+{ componentStack: '...' }
+```
+
+**Critério de Sucesso:** ✅ Erro logado no console
+
+---
+
+### Teste 7: Limpar Código de Teste
+
+**Objetivo:** Remover componente buggy após validação.
+
+**Passos:**
+```bash
+# Remover arquivo
+rm src/components/BuggyTest.tsx
+
+# Remover import e rota de App.tsx (manualmente)
+```
+
+**Critério de Sucesso:** ✅ Código de teste removido
+
+---
+
+### Matriz de Testes
+
+| Teste | Objetivo | Duração | Crítico | Status |
+|-------|----------|---------|---------|--------|
+| **1. TypeScript compila** | Validação sintaxe | 30s | ✅ Sim | Pendente |
+| **2. App funciona normal** | Regressão | 2min | ✅ Sim | Pendente |
+| **3. Fallback UI aparece** | Captura erro | 2min | ✅ Sim | Pendente |
+| **4. Stack trace (dev)** | Debugging | 1min | 🟡 Não | Pendente |
+| **5. Botão recarregar** | Recovery | 1min | ✅ Sim | Pendente |
+| **6. Console.error** | Logging | 1min | 🟡 Não | Pendente |
+| **7. Limpar teste** | Cleanup | 1min | ✅ Sim | Pendente |
+
+**Tempo Total Estimado:** ~9 minutos
+
+---
+
+## 10. Checklist de Implementação (Para Depois, NÃO Aplicar Agora)
+
+### Fase 1: Preparação (2 min)
+
+- [ ] **1.1** Verificar branch limpa
+  ```bash
+  git status
+  # Verificar: working tree clean
+  ```
+
+- [ ] **1.2** Criar branch (opcional)
+  ```bash
+  git checkout -b feat/error-boundary
+  ```
+
+---
+
+### Fase 2: Criar ErrorBoundary (8 min)
+
+- [ ] **2.1** Criar arquivo
+  ```bash
+  touch src/components/ErrorBoundary.tsx
+  ```
+
+- [ ] **2.2** Adicionar imports
+  ```typescript
+  import React, { Component, ErrorInfo, ReactNode } from 'react';
+  import { AlertCircle } from 'lucide-react';
+  import { Button } from '@/components/ui/button';
+  ```
+
+- [ ] **2.3** Adicionar interfaces
+  ```typescript
+  interface Props { children: ReactNode; }
+  interface State { hasError: boolean; error: Error | null; }
+  ```
+
+- [ ] **2.4** Criar class component
+  - Estado inicial
+  - `getDerivedStateFromError`
+  - `componentDidCatch`
+  - `handleReset`
+  - `render` com fallback UI
+
+- [ ] **2.5** Adicionar JSX do fallback
+  - Container centralizado
+  - Ícone AlertCircle
+  - Título + mensagem
+  - Details com stack (dev only)
+  - Botão recarregar
+
+- [ ] **2.6** Export default
+
+---
+
+### Fase 3: Modificar App.tsx (3 min)
+
+- [ ] **3.1** Abrir App.tsx
+  ```bash
+  code src/App.tsx
+  ```
+
+- [ ] **3.2** Adicionar import no topo
+  ```typescript
+  import ErrorBoundary from '@/components/ErrorBoundary';
+  ```
+
+- [ ] **3.3** Adicionar wrapper
+  - Encontrar return do App
+  - Adicionar `<ErrorBoundary>` antes de `<QueryClientProvider>`
+  - Adicionar `</ErrorBoundary>` no final (antes de fechar App)
+
+- [ ] **3.4** Salvar arquivo
+
+---
+
+### Fase 4: Validação Imediata (2 min)
+
+- [ ] **4.1** Compilar TypeScript
   ```bash
   npx tsc --noEmit
   ```
+  - ✅ Esperado: zero erros
 
-- [ ] Frontend inicia:
+- [ ] **4.2** Iniciar dev server
+  ```bash
+  npm run dev
+  ```
+  - ✅ Esperado: inicia sem erros
+
+---
+
+### Fase 5: Testes Funcionais (8 min)
+
+- [ ] **5.1** Teste 2: App funciona normal
+  - Login/logout/navegação
+
+- [ ] **5.2** Criar BuggyTest.tsx
+  ```bash
+  cat > src/components/BuggyTest.tsx << 'EOF'
+  export const BuggyTest = () => {
+    throw new Error('Teste!');
+    return null;
+  };
+  EOF
+  ```
+
+- [ ] **5.3** Adicionar rota de teste
+  - Import BuggyTest em App.tsx
+  - Adicionar `<Route path="/test-error" element={<BuggyTest />} />`
+
+- [ ] **5.4** Executar Teste 3: Fallback UI
+  - Navegar `/test-error`
+  - ✅ Fallback aparece
+
+- [ ] **5.5** Executar Teste 4: Stack trace
+  - Verificar details (dev)
+
+- [ ] **5.6** Executar Teste 5: Botão recarregar
+  - Clicar botão
+  - ✅ Recovery funciona
+
+- [ ] **5.7** Executar Teste 6: Console
+  - Verificar `console.error`
+
+---
+
+### Fase 6: Cleanup (2 min)
+
+- [ ] **6.1** Remover código de teste
+  ```bash
+  rm src/components/BuggyTest.tsx
+  ```
+
+- [ ] **6.2** Remover rota de teste de App.tsx
+  - Deletar import
+  - Deletar route
+
+- [ ] **6.3** Verificar app final
+  ```bash
+  npm run dev
+  # Testar navegação normal
+  ```
+
+---
+
+### Fase 7: Commit (3 min)
+
+- [ ] **7.1** Adicionar arquivos
+  ```bash
+  git add src/components/ErrorBoundary.tsx src/App.tsx
+  ```
+
+- [ ] **7.2** Verificar diff
+  ```bash
+  git diff --cached
+  ```
+
+- [ ] **7.3** Fazer commit
+  ```bash
+  git commit -m "feat(P0-015): add Error Boundary to prevent white screen
+
+Created ErrorBoundary component to gracefully handle React errors:
+- Class component with fallback UI (React requirement)
+- Wrapped entire app in App.tsx
+- Shows friendly error page instead of white screen
+- Includes error details in development mode
+- Provides 'Reload' button for recovery
+
+Changes:
+- NEW: src/components/ErrorBoundary.tsx (fallback UI)
+- MODIFIED: src/App.tsx (+2 lines: import + wrapper)
+
+Benefits:
+- Better UX (no white screen)
+- Error logging (console + future Sentry)
+- Professional appearance
+- Easy recovery
+
+Risk: LOW (new code, doesn't modify existing logic)
+Tests: Manual (simulated error + verified fallback)
+
+Ref: docs/MELHORIAS-PASSO-A-PASSO.md#correção-8"
+  ```
+
+---
+
+### Fase 8: Pós-Commit (1 min)
+
+- [ ] **8.1** Verificar histórico
+  ```bash
+  git log --oneline -1
+  ```
+
+- [ ] **8.2** Teste final
+  - Recarregar app
+  - Navegação OK?
+
+---
+
+### Checklist de Rollback (Se Necessário)
+
+- [ ] **R.1** Reverter arquivos
+  ```bash
+  # Opção 1: Antes de commit
+  git checkout HEAD -- src/components/ErrorBoundary.tsx src/App.tsx
+  
+  # Opção 2: Após commit
+  git revert HEAD
+  ```
+
+- [ ] **R.2** Deletar ErrorBoundary
+  ```bash
+  rm src/components/ErrorBoundary.tsx
+  ```
+
+- [ ] **R.3** Verificar app funciona
   ```bash
   npm run dev
   ```
 
-- [ ] **Testar funcionamento normal:**
-  - Navegar pela aplicação
-  - Fazer login/logout
-  - Tudo deve funcionar como antes
+---
 
-- [ ] **Testar Error Boundary (simular erro):**
+## 11. Assunções e Pontos Ambíguos
 
-  **Opção A: Simular erro em componente:**
-  
-  Criar arquivo temporário `src/components/BuggyComponent.tsx`:
-  ```typescript
-  export const BuggyComponent = () => {
-    throw new Error('Teste de Error Boundary!');
-    return <div>Nunca renderiza</div>;
-  };
-  ```
-  
-  Adicionar em alguma rota de `App.tsx`:
-  ```typescript
-  import { BuggyComponent } from './components/BuggyComponent';
-  
-  // Adicionar rota de teste:
-  <Route path="/test-error" element={<BuggyComponent />} />
-  ```
-  
-  Visitar: http://localhost:8080/test-error
-  
-  **Resultado esperado:**
-  - ✅ Deve mostrar tela de erro bonita (não tela branca)
-  - ✅ Deve mostrar ícone de alerta
-  - ✅ Deve mostrar mensagem amigável
-  - ✅ Em dev, deve mostrar detalhes do erro
-  - ✅ Botão "Recarregar" deve funcionar
+### Assunções Confirmadas
 
-**4. Remover código de teste:**
-```bash
-# Após validar, remover:
-rm src/components/BuggyComponent.tsx
+**1. Nome do Componente**
+- **Assunção:** `ErrorBoundary` é nome adequado
+- **Evidência:** Nome padrão React docs, amplamente usado
+- **Alternativa considerada:** `ErrorCatcher`, `GlobalErrorHandler`
+- **Decisão:** ✅ `ErrorBoundary` (convenção)
 
-# E remover a rota de teste de App.tsx
+**2. Localização do Arquivo**
+- **Assunção:** `src/components/ErrorBoundary.tsx`
+- **Evidência:** Componentes gerais ficam em `/components`
+- **Alternativa considerada:** `src/lib/ErrorBoundary.tsx`
+- **Decisão:** ✅ `/components` (é componente React)
+
+**3. Class Component é Necessário**
+- **Assunção:** DEVE ser class (não pode ser hook)
+- **Evidência:** React documentation oficial
+- **Alternativa considerada:** Criar com hooks
+- **Decisão:** ✅ Class (requirement do React)
+
+**4. Posição do Wrapper**
+- **Assunção:** Envolver `<QueryClientProvider>` (raiz)
+- **Evidência:** Máxima cobertura
+- **Alternativa considerada:** Dentro de QueryClientProvider
+- **Decisão:** ✅ Fora (cobre tudo, incluindo providers)
+
+**5. Botão Recarregar Usa `window.location`**
+- **Assunção:** `window.location.href = '/'` ao invés de React Router
+- **Evidência:** Fail-safe, limpa estado completamente
+- **Alternativa considerada:** `navigate('/')` do React Router
+- **Decisão:** ✅ `window.location` (mais seguro)
+
+---
+
+### Pontos Ambíguos RESOLVIDOS
+
+**1. Mensagem de Erro para Usuário**
+
+**Ambiguidade:** Qual mensagem mostrar?
+
+**Opções:**
+```typescript
+// Opção A: Genérica
+"Ops! Algo deu errado"
+
+// Opção B: Específica
+"Erro ao carregar dados. Tente novamente."
+
+// Opção C: Técnica
+"Uncaught exception in React component"
 ```
 
-#### Commit
+**Decisão:** ✅ **Opção A** (genérica)
+- Amigável
+- Não assusta usuário
+- Não expõe detalhes técnicos
 
-```bash
-git add src/components/ErrorBoundary.tsx src/App.tsx
-git commit -m "feat: add Error Boundary to prevent white screen (P0-015)
+---
 
-- Created ErrorBoundary component with fallback UI
-- Wrapped entire app with error boundary
-- Shows friendly error page instead of white screen
-- Includes error details in development mode
-- Risk Level: LOW (new code, doesn't modify existing)
-- Ref: docs/MELHORIAS-E-CORRECOES.md#P0-015"
+**2. Stack Trace Visível em Produção?**
+
+**Ambiguidade:** Mostrar stack em produção?
+
+**Análise:**
+- **Sim:** Ajuda debugging
+- **Não:** Exposição de código interno
+
+**Decisão:** ✅ **NÃO** (apenas dev)
+```typescript
+{process.env.NODE_ENV === 'development' && ...}
 ```
 
-#### Notas Importantes
+---
 
-💡 **Por que Class Component?**
-- Error Boundaries DEVEM ser class components
-- É uma limitação do React (não funciona com hooks)
-- É a única exceção onde usamos classes
+**3. Integrar Sentry Agora?**
 
-⚠️ **Limitações:**
-- Não captura erros em event handlers
-- Não captura erros em código assíncrono
-- Não captura erros no próprio Error Boundary
+**Ambiguidade:** Adicionar Sentry nesta correção?
 
-🚀 **Próximo Passo:**
-- Futuramente integrar com Sentry para monitoramento
-- Por enquanto, apenas console.error
+**Análise:**
+- **Sim:** Monitoramento completo
+- **Não:** Requer conta, config, escopo maior
+
+**Decisão:** ✅ **NÃO agora** (deixar TODO comentado)
+```typescript
+// TODO: Sentry.captureException(error, { extra: errorInfo });
+```
+
+---
+
+**4. Reset vs Reload**
+
+**Ambiguidade:** `setState({ hasError: false })` vs `window.location.href`?
+
+**Análise:**
+```typescript
+// Opção A: setState (soft reset)
+this.setState({ hasError: false, error: null })
+
+// Opção B: window.location (hard reload)
+window.location.href = '/'
+```
+
+**Decisão:** ✅ **Opção B** (hard reload)
+- Limpa estado completamente
+- Mais seguro (evita loop)
+- Simples
+
+---
+
+**5. Styling do Fallback**
+
+**Ambiguidade:** Tailwind inline vs CSS file?
+
+**Decisão:** ✅ **Tailwind inline**
+- Consistente com codebase
+- Sem dependência externa
+- Componente autocontido
+
+---
+
+### Ambiguidades PENDENTES (Fora do Escopo)
+
+| Ambiguidade | Decisão Atual | Quando Resolver |
+|-------------|---------------|-----------------|
+| **Integração Sentry** | TODO comentado | MAINT-XXX |
+| **Error Boundaries granulares** | Apenas global | Se necessário |
+| **i18n de mensagens** | Inglês PT-BR | Quando i18n |
+| **Retry automático** | Apenas reload manual | Feature request |
+| **Analytics de erro** | Nenhum | Quando analytics |
+
+---
+
+## 12. Assunções Técnicas
+
+**Ambiente:**
+- ✅ React 18.x
+- ✅ TypeScript 5.x
+- ✅ Tailwind CSS configurado
+- ✅ shadcn/ui Button component
+- ✅ lucide-react icons
+
+**Dependências:**
+- ✅ `react` (class component support)
+- ✅ `@/components/ui/button` (shadcn)
+- ✅ `lucide-react` (AlertCircle icon)
+
+**Convenções:**
+- ✅ Class components permitidos (exceção para Error Boundary)
+- ✅ Tailwind para styling
+- ✅ `@/` alias configurado
+- ✅ TypeScript strict mode
+
+---
+
+## 13. Apêndice: Exemplos (NÃO Aplicar)
+
+### Exemplo A: ErrorBoundary Completo
+
+```typescript
+// Exemplo (não aplicar) — Implementação completa
+
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+interface Props {
+    children: ReactNode;
+}
+
+interface State {
+    hasError: boolean;
+    error: Error | null;
+}
+
+class ErrorBoundary extends Component<Props, State> {
+    public state: State = {
+        hasError: false,
+        error: null
+    };
+
+    public static getDerivedStateFromError(error: Error): State {
+        return { hasError: true, error };
+    }
+
+    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('ErrorBoundary caught:', error, errorInfo);
+    }
+
+    private handleReset = () => {
+        this.setState({ hasError: false, error: null });
+        window.location.href = '/';
+    };
+
+    public render() {
+        if (this.state.hasError) {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                    <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-lg text-center">
+                        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                            Ops! Algo deu errado
+                        </h1>
+                        <p className="text-gray-600 mb-6">
+                            Desculpe, encontramos um erro inesperado.
+                        </p>
+                        {process.env.NODE_ENV === 'development' && this.state.error && (
+                            <details className="mb-4 text-left">
+                                <summary className="cursor-pointer text-sm text-gray-500">
+                                    Detalhes do erro (dev)
+                                </summary>
+                                <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-auto max-h-48">
+                                    {this.state.error.message}\n{this.state.error.stack}
+                                </pre>
+                            </details>
+                        )}
+                        <Button onClick={this.handleReset} className="w-full">
+                            Recarregar Aplicação
+                        </Button>
+                    </div>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
+
+export default ErrorBoundary;
+```
+
+### Exemplo B: App.tsx Modificado
+
+```typescript
+// Exemplo (não aplicar) — App.tsx com ErrorBoundary
+
+import ErrorBoundary from '@/components/ErrorBoundary';  // ✅ ADICIONAR
+
+function App() {
+  return (
+    <ErrorBoundary>  {/* ✅ ADICIONAR wrapper */}
+      <QueryClientProvider client={queryClient}>
+        <TenantProvider>
+          <AuthProvider>
+            {/* ... resto do app ... */}
+          </AuthProvider>
+        </TenantProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>  {/* ✅ FECHAR wrapper */}
+  );
+}
+```
+
+### Exemplo C: Componente Buggy para Teste
+
+```typescript
+// Exemplo (não aplicar) — BuggyTest.tsx (TEMPORÁRIO)
+
+export const BuggyTest = () => {
+  throw new Error('Teste de Error Boundary - deletar após validar!');
+  return <div>Nunca renderiza</div>;
+};
+```
+
+### Exemplo D: Diff Esperado
+
+```diff
+# Exemplo (não aplicar) — Git diff esperado
+
+diff --git a/src/components/ErrorBoundary.tsx b/src/components/ErrorBoundary.tsx
+new file mode 100644
+index 0000000..abcd123
+--- /dev/null
++++ b/src/components/ErrorBoundary.tsx
+@@ -0,0 +1,60 @@
++import React, { Component, ErrorInfo, ReactNode } from 'react';
++import { AlertCircle } from 'lucide-react';
++...
++export default ErrorBoundary;
+
+diff --git a/src/App.tsx b/src/App.tsx
+index def4567..ghi8910
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,5 +1,6 @@
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import ErrorBoundary from '@/components/ErrorBoundary';
+...
+   return (
++    <ErrorBoundary>
+       <QueryClientProvider client={queryClient}>
+...
+       </QueryClientProvider>
++    </ErrorBoundary>
+   );
+```
+
+### Exemplo E: Console Output Esperado
+
+```bash
+# Exemplo (não aplicar) — Console ao capturar erro
+
+ErrorBoundary caught: Error: Teste!
+    at BuggyTest (BuggyTest.tsx:2:9)
+    at renderWithHooks (react-dom.development.js:16175:18)
+    ...
+{componentStack: '\n    at BuggyTest...'}
+```
+
+### Exemplo F: React Docs Reference
+
+**Documentação Oficial:**
+- [Error Boundaries - React Docs](https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)
+- [getDerivedStateFromError](https://react.dev/reference/react/Component#static-getderivedstatefromerror)
+- [componentDidCatch](https://react.dev/reference/react/Component#componentdidcatch)
+
+### Exemplo G: Limitações Documentadas
+
+```typescript
+// Exemplo (não aplicar) — O que Error Boundary NÃO captura
+
+// ❌ Event handlers (precisa try-catch manual)
+<button onClick={() => {
+  throw new Error('Não capturado!');
+}}>
+  Clique
+</button>
+
+// ❌ Código assíncrono
+useEffect(() => {
+  setTimeout(() => {
+    throw new Error('Não capturado!');
+  }, 1000);
+}, []);
+
+// ✅ Erros de renderização (CAPTURADO)
+const Component = () => {
+  throw new Error('Capturado!');
+  return <div>...</div>;
+};
+```
+
+### Exemplo H: Fallback UI Visual
+
+```
+┌────────────────────────────────────────────┐
+│                                            │
+│               ⚠️                           │
+│        (AlertCircle icon)                  │
+│                                            │
+│      Ops! Algo deu errado                  │
+│                                            │
+│  Desculpe, encontramos um erro             │
+│  inesperado.                               │
+│                                            │
+│  ▼ Detalhes do erro (dev)                  │
+│  ┌──────────────────────────────────┐      │
+│  │ Error: Teste!                    │      │
+│  │   at Component.tsx:10            │      │
+│  │   ...                            │      │
+│  └──────────────────────────────────┘      │
+│                                            │
+│  ┌──────────────────────────────────┐      │
+│  │   Recarregar Aplicação           │      │
+│  └──────────────────────────────────┘      │
+│                                            │
+└────────────────────────────────────────────┘
+```
+
+### Exemplo I: Validação com grep
+
+```bash
+# Exemplo (não aplicar) — Verificar implementação
+
+# 1. Verificar que ErrorBoundary existe
+ls src/components/ErrorBoundary.tsx
+# ✅ Esperado: arquivo existe
+
+# 2. Verificar que é class component
+grep -n "class ErrorBoundary" src/components/ErrorBoundary.tsx
+# ✅ Esperado: linha encontrada
+
+# 3. Verificar métodos obrigatórios
+grep -n "getDerivedStateFromError\|componentDidCatch" src/components/ErrorBoundary.tsx
+# ✅ Esperado: 2 linhas encontradas
+
+# 4. Verificar uso em App.tsx
+grep -n "ErrorBoundary" src/App.tsx
+# ✅ Esperado: import + wrapper (2+ linhas)
+```
+
+### Exemplo J: Checklist Manual de QA
+
+```
+# Exemplo (não aplicar) — Checklist para QA
+
+CORREÇÃO #8: Error Boundary
+============================
+
+PRÉ-TESTE:
+☐ Frontend rodando (porta 5173)
+☐ Browser aberto (F12 → Console)
+
+TESTE 1: TypeScript
+☐ npx tsc --noEmit → Zero erros
+
+TESTE 2: App Normal
+☐ Login funciona
+☐ Dashboard carrega
+☐ Navegação OK
+☐ Console limpo
+
+TESTE 3: Simular Erro
+☐ Criar BuggyTest.tsx
+☐ Adicionar rota /test-error
+☐ Navegar para rota
+☐ ✅ Fallback UI aparece (NÃO tela branca)
+
+TESTE 4: Fallback UI
+☐ Ícone AlertCircle visível
+☐ Título "Ops! Algo deu errado"
+☐ Mensagem amigável
+☐ Botão "Recarregar" presente
+
+TESTE 5: Stack Trace (dev)
+☐ `<details>` presente
+☐ Ao expandir, mostra erro
+☐ Stack completo visível
+
+TESTE 6: Botão Recarregar
+☐ Clicar botão
+☐ App navega para /
+☐ Estado limpo
+☐ App funciona normal
+
+TESTE 7: Console
+☐ console.error registrou erro
+☐ ErrorBoundary caught: ...
+
+TESTE 8: Cleanup
+☐ Deletar BuggyTest.tsx
+☐ Remover rota de teste
+☐ Commit
+
+RESULTADO:
+☐ PASS: Todos os testes OK
+☐ FAIL: <descrever>
+
+ROLLBACK (se necessário):
+☐ git revert HEAD
+☐ Verificar: app volta ao normal
+```
+
+---
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- CORREÇÃO #8 - FIM -->
