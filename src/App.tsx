@@ -7,6 +7,7 @@ import { AppProvider } from "@/contexts/AppContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -31,54 +32,56 @@ import Profile from "./pages/Profile";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TenantProvider>
-      <AuthProvider>
-        <AppProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                {/* Rotas públicas */}
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TenantProvider>
+        <AuthProvider>
+          <AppProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  {/* Rotas públicas */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
 
-                {/* Rotas protegidas */}
-                <Route path="/" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/configuracoes" element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                } />
-                <Route path="/perfil" element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } />
+                  {/* Rotas protegidas */}
+                  <Route path="/" element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dashboard" element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/configuracoes" element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/perfil" element={
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  } />
 
-                {/* Futuras rotas do sistema serão adicionadas aqui */}
-                {/* Exemplo: <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} /> */}
-                {/* Exemplo: <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} /> */}
+                  {/* Futuras rotas do sistema serão adicionadas aqui */}
+                  {/* Exemplo: <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} /> */}
+                  {/* Exemplo: <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} /> */}
 
-                {/* SEMPRE MANTER ESTA ROTA POR ÚLTIMO - captura URLs inválidas */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </AppProvider>
-      </AuthProvider>
-    </TenantProvider>
-  </QueryClientProvider>
+                  {/* SEMPRE MANTER ESTA ROTA POR ÚLTIMO - captura URLs inválidas */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </AppProvider>
+        </AuthProvider>
+      </TenantProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
