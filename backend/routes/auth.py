@@ -21,7 +21,6 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 @router.post("/register", response_model=Token)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """Register a new user."""
-    # Check if user already exists
     existing_user = db.query(User).filter(
         (User.email == user_data.email) | (User.username == user_data.username)
     ).first()
@@ -38,7 +37,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
                 detail="Username already taken"
             )
     
-    # Create new user
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
         email=user_data.email,
@@ -51,7 +49,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
-    # Create tokens
     access_token = create_access_token(
         data={"sub": db_user.email, "user_id": db_user.id}
     )
@@ -70,7 +67,6 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
     """Login user and return tokens."""
     print(f"Login attempt: {user_credentials.email}")
     
-    # Find user by email
     user = db.query(User).filter(User.email == user_credentials.email).first()
     print(f"User found: {user is not None}")
     
@@ -97,7 +93,6 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
             detail="Inactive user"
         )
     
-    # Create tokens
     access_token = create_access_token(
         data={"sub": user.email, "user_id": user.id}
     )
@@ -105,7 +100,6 @@ async def login(user_credentials: UserLogin, response: Response, db: Session = D
         data={"sub": user.email, "user_id": user.id}
     )
     
-    # Set httpOnly cookies
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -153,7 +147,6 @@ async def refresh_token(
                 detail="Invalid refresh token"
             )
         
-        # Create new tokens
         access_token = create_access_token(
             data={"sub": user.email, "user_id": user.id}
         )
@@ -161,7 +154,6 @@ async def refresh_token(
             data={"sub": user.email, "user_id": user.id}
         )
         
-        # Update cookies
         response.set_cookie(
             key="access_token",
             value=access_token,

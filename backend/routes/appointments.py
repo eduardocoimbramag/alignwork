@@ -38,7 +38,6 @@ def get_summary(
 ):
     response.headers["Cache-Control"] = "no-store"
     
-    # Parse ISO strings to datetime
     from_dt = datetime.fromisoformat(from_.replace('Z', '+00:00'))
     to_dt = datetime.fromisoformat(to.replace('Z', '+00:00'))
     
@@ -155,7 +154,6 @@ def create_appointment(
 ):
     response.headers["Cache-Control"] = "no-store"
     
-    # Parse ISO string to datetime
     starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
     
     db_appointment = Appointment(

@@ -105,7 +105,6 @@ const settingsIniciais: UserSettings = {
   language: "pt-br"
 };
 
-// Provedor do contexto - componente que vai "envolver" toda a aplicação
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(agendamentosIniciais);
@@ -123,7 +122,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return settingsIniciais;
   });
 
-  // Função para adicionar novo cliente
   const adicionarCliente = (dadosCliente: Omit<Cliente, 'id' | 'dataCadastro'>) => {
     const novoCliente: Cliente = {
       ...dadosCliente,
@@ -133,7 +131,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setClientes(prev => [...prev, novoCliente]);
   };
 
-  // Função para buscar clientes por nome ou CPF
   const buscarClientes = (termo: string): Cliente[] => {
     if (!termo.trim()) return clientes;
 
@@ -144,7 +141,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  // Função para adicionar novo agendamento
   const adicionarAgendamento = (dadosAgendamento: Omit<Agendamento, 'id'> & { id?: string }) => {
     const novoAgendamento: Agendamento = {
       ...dadosAgendamento,
@@ -153,7 +149,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAgendamentos(prev => [...prev, novoAgendamento]);
   };
 
-  // Função para atualizar status do agendamento (pendente -> confirmado -> concluído)
   const atualizarStatusAgendamento = (id: string, novoStatus: Agendamento['status']) => {
     setAgendamentos(prev =>
       prev.map(agendamento =>
@@ -164,17 +159,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  // Função para desmarcar agendamento
   const desmarcarAgendamento = (id: string) => {
     atualizarStatusAgendamento(id, 'desmarcado');
   };
 
-  // Função para buscar agendamentos de um cliente específico
   const buscarAgendamentosDoCliente = (clienteId: string): Agendamento[] => {
     return agendamentos.filter(agendamento => agendamento.clienteId === clienteId);
   };
 
-  // Função para buscar agendamentos de uma data específica
   const buscarAgendamentosPorData = (data: Date): Agendamento[] => {
     return agendamentos.filter(agendamento => {
       const agendamentoData = new Date(agendamento.data);
@@ -182,7 +174,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   };
 
-  // Função para salvar anotação da consulta
   const salvarAnotacaoConsulta = (agendamentoId: string, anotacoes: string, prescriptions?: Prescription[]) => {
     setAgendamentos(prev =>
       prev.map(agendamento =>
@@ -193,7 +184,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  // Função para concluir consulta
   const concluirConsulta = (agendamentoId: string, anotacoes?: string, prescriptions?: Prescription[]) => {
     setAgendamentos(prev =>
       prev.map(agendamento =>
@@ -204,7 +194,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     );
   };
 
-  // Função para buscar histórico de consultas do cliente
   const buscarHistoricoConsultas = (clienteId: string): Agendamento[] => {
     return agendamentos
       .filter(agendamento => agendamento.clienteId === clienteId)
@@ -225,10 +214,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (dataA !== dataB) return dataA - dataB;
         return a.horaInicio.localeCompare(b.horaInicio);
       })
-      .slice(0, 15); // Limitar a 15 itens
+      .slice(0, 15);
   };
 
-  // Função para salvar configurações
   const saveSettings = (newSettings: UserSettings) => {
     setSettings(newSettings);
     try {
@@ -238,7 +226,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  // Valor que será disponibilizado para toda a aplicação
   const valor: AppContextType = {
     clientes,
     agendamentos,
@@ -265,7 +252,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   );
 };
 
-// Hook personalizado para usar o contexto de forma mais fácil
 export const useApp = () => {
   const context = useContext(AppContext);
   if (context === undefined) {
