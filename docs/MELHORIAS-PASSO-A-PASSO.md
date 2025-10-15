@@ -6968,75 +6968,494 @@ import { ApiError } from '@/services/api'
 <!-- CORREÇÃO #7 - INÍCIO -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 
-### Correção #7: Extrair Código Duplicado de Prefetch (P0-009)
+### Correção #7 — Extrair Código Duplicado de Prefetch (P0-009)
 
-**Nível de Risco:** 🟡 BAIXO  
-**Tempo Estimado:** 15 minutos  
-**Prioridade:** P0 (Manutenibilidade)  
-**Referência:** [MELHORIAS-E-CORRECOES.md#P0-009](./MELHORIAS-E-CORRECOES.md#p0-009-codigo-duplicado-de-prefetch)
+> **Modo:** DOCUMENTAÇÃO SOMENTE (não aplicar agora)  
+> **Nível de Risco:** 🟡 BAIXO  
+> **Tempo Estimado:** 10-15 minutos  
+> **Prioridade:** P0 (Manutenibilidade)  
+> **Categoria:** Code Smell  
+> **Princípio Violado:** DRY (Don't Repeat Yourself)  
+> **Referência:** [MELHORIAS-E-CORRECOES.md#P0-009](./MELHORIAS-E-CORRECOES.md#p0-009-codigo-duplicado-de-prefetch)
 
-#### Por Que Fazer?
+---
 
-- ✅ Remove 40 linhas de código duplicado
-- ✅ DRY principle
-- ✅ Mais fácil de manter
-- ✅ Seguro (extração pura)
+## 1. Contexto e Problema
 
-#### Pré-requisitos
+### Sintomas Observados
 
-- [ ] Correção #6 concluída
-- [ ] Entender o código de AuthContext
+**1. Código Duplicado em Dois Locais Críticos**
 
-#### Arquivo Afetado
+No arquivo `src/contexts/AuthContext.tsx`, **~50 linhas de código** aparecem duplicadas em dois pontos:
 
-- `src/contexts/AuthContext.tsx` (linhas 23-102)
+- **Localização A:** `useEffect` de bootstrap (linhas 31-58)
+- **Localização B:** Função `doLogin` (linhas 74-100)
 
-#### Problema Atual
+**Código Duplicado Identificado:**
 
 ```typescript
-// Código duplicado em 2 lugares:
-// 1. useEffect (linhas 23-68)
-// 2. doLogin (linhas 70-102)
-
-// Ambos têm estas linhas idênticas:
+// Exemplo (não aplicar) — Bloco duplicado encontrado
 const tz = 'America/Recife';
 const fromISO = dayjs().tz(tz).startOf('day').toISOString();
 const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
 await Promise.all([
-  queryClient.prefetchQuery({ ... }),
-  queryClient.prefetchQuery({ ... }),
+    queryClient.prefetchQuery({
+        queryKey: ['dashboardMegaStats', tenantId, tz],
+        queryFn: async () => {
+            const { api } = await import('../services/api');
+            const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                params: { tenantId, tz },
+                headers: { 'Cache-Control': 'no-cache' }
+            });
+            return data;
+        }
+    }),
+    queryClient.prefetchQuery({
+        queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+        queryFn: async () => {
+            const { api } = await import('../services/api');
+            const { data } = await api.get('/api/v1/appointments/summary', {
+                params: { tenantId, from: fromISO, to: toISO, tz },
+                headers: { 'Cache-Control': 'no-cache' }
+            });
+            return data;
+        }
+    })
 ]);
 ```
 
-#### Passo a Passo
+**2. Violação do Princípio DRY**
 
-**1. Abrir arquivo:**
+O mesmo código aparece com **zero variação** em ambos os locais, violando:
+
+- ✗ **DRY (Don't Repeat Yourself):** Lógica duplicada
+- ✗ **Single Source of Truth:** Duas "verdades" sobre prefetch
+- ✗ **Manutenibilidade:** Mudanças devem ser feitas em 2 lugares
+
+**3. Impacto na Manutenibilidade**
+
+| Métrica | Antes (COM duplicação) | Depois (SEM duplicação) |
+|---------|------------------------|-------------------------|
+| **Linhas duplicadas** | ~50 linhas | 0 linhas |
+| **Locais para alterar** | 2 locais | 1 local |
+| **Risco de bug** | Alto (divergência) | Baixo (consistência) |
+| **Testabilidade** | Difícil (código inline) | Fácil (função isolada) |
+
+### Passos de Reprodução
+
+**Verificar duplicação manualmente:**
+
 ```bash
+# Exemplo (não aplicar) — Comando para visualizar duplicação
 code src/contexts/AuthContext.tsx
+
+# Posicione o cursor:
+# - Linha 31-58 (useEffect)
+# - Linha 74-100 (doLogin)
+# 
+# Compare visualmente: código é idêntico
 ```
 
-**2. Criar função auxiliar:**
+**Buscar ocorrências com grep:**
 
-Adicionar no TOPO do arquivo (após imports, antes de `const AuthContext`):
+```bash
+# Exemplo (não aplicar) — Buscar padrão repetido
+grep -n "queryClient.prefetchQuery" src/contexts/AuthContext.tsx
+
+# Resultado esperado:
+# 36:                    queryClient.prefetchQuery({
+# 47:                    queryClient.prefetchQuery({
+# 78:                    queryClient.prefetchQuery({
+# 89:                    queryClient.prefetchQuery({
+#
+# ✗ 4 ocorrências (2 pares duplicados)
+```
+
+### Impacto
+
+**Técnico:**
+- ✗ **Manutenibilidade:** Mudanças no prefetch requerem editar 2 funções
+- ✗ **Consistência:** Risco de alteração em apenas 1 local (divergência)
+- ✗ **Testabilidade:** Código inline dificulta testes unitários
+- ✗ **Legibilidade:** Código longo obscurece intenção das funções principais
+
+**Risco de Bugs Futuros:**
+
+Se um desenvolvedor mudar apenas 1 das duplicações:
 
 ```typescript
-// Adicionar após linha ~6 (depois dos imports):
+// Exemplo (não aplicar) — Cenário de bug por divergência
 
-/**
- * Prefetch dashboard data to avoid empty screen after login
- * @param queryClient - React Query client
- * @param tenantId - Current tenant ID
- */
+// useEffect atualizado (usa cache de 3 dias)
+const toISO = dayjs().tz(tz).add(3, 'day').startOf('day').toISOString();
+
+// doLogin NÃO atualizado (ainda usa 2 dias)
+const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
+
+// ✗ RESULTADO: comportamento diferente em login vs reload
+```
+
+**Métrica Code Smell:**
+
+- **Duplicação:** ~50 linhas × 2 = **100 linhas de código redundante**
+- **Complexidade Ciclomática:** Aumentada artificialmente
+- **Debt Ratio:** Estimado em 10-15 minutos de refatoração
+
+---
+
+## 2. Mapa de Fluxo (Alto Nível)
+
+### Fluxo ATUAL (COM Duplicação)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  AuthProvider Initialization (App Boot)                     │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+            ┌─────────────────────────┐
+            │  useEffect(() => {       │
+            │    checkAuthStatus()     │
+            │  }, [])                  │
+            └─────────────────────────┘
+                          │
+                          ▼
+        ┌──────────────────────────────────┐
+        │  const userData = await me();    │
+        └──────────────────────────────────┘
+                          │
+                          ▼
+        ╔═══════════════════════════════════════════╗
+        ║  DUPLICAÇÃO #1 (linhas 31-58)             ║
+        ║                                            ║
+        ║  const tz = 'America/Recife';             ║
+        ║  const fromISO = dayjs()...;              ║
+        ║  const toISO = dayjs()...;                ║
+        ║                                            ║
+        ║  await Promise.all([                      ║
+        ║    prefetch('dashboardMegaStats'),        ║
+        ║    prefetch('dashboardSummary')           ║
+        ║  ]);                                      ║
+        ╚═══════════════════════════════════════════╝
+                          │
+                          ▼
+              ┌───────────────────┐
+              │  setUser(userData) │
+              │  setLoading(false) │
+              └───────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  User Clicks "Login" Button                                  │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+            ┌─────────────────────────┐
+            │  login(credentials)      │
+            └─────────────────────────┘
+                          │
+                          ▼
+            ┌─────────────────────────┐
+            │  doLogin(credentials)    │
+            └─────────────────────────┘
+                          │
+                          ▼
+        ┌──────────────────────────────────┐
+        │  const userData = await login(); │
+        └──────────────────────────────────┘
+                          │
+                          ▼
+        ╔═══════════════════════════════════════════╗
+        ║  DUPLICAÇÃO #2 (linhas 74-100)            ║
+        ║                                            ║
+        ║  const tz = 'America/Recife';             ║
+        ║  const fromISO = dayjs()...;              ║
+        ║  const toISO = dayjs()...;                ║
+        ║                                            ║
+        ║  await Promise.all([                      ║
+        ║    prefetch('dashboardMegaStats'),        ║
+        ║    prefetch('dashboardSummary')           ║
+        ║  ]);                                      ║
+        ╚═══════════════════════════════════════════╝
+                          │
+                          ▼
+              ┌───────────────────┐
+              │  return userData   │
+              └───────────────────┘
+
+⚠️  PROBLEMA: Blocos DUPLICAÇÃO #1 e #2 são IDÊNTICOS
+```
+
+### Fluxo PROPOSTO (SEM Duplicação)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Módulo-Nível: Helper Function (após imports)               │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+        ╔═══════════════════════════════════════════╗
+        ║  prefetchDashboardData()                  ║
+        ║  ────────────────────────────────         ║
+        ║  • Função extraída (DRY)                  ║
+        ║  • Recebe: queryClient, tenantId          ║
+        ║  • Retorna: Promise<void>                 ║
+        ║  • Contém TODA lógica de prefetch         ║
+        ╚═══════════════════════════════════════════╝
+                          │
+         ┌────────────────┴────────────────┐
+         │                                  │
+         ▼                                  ▼
+┌────────────────────┐        ┌────────────────────┐
+│  useEffect (boot)  │        │  doLogin (manual)  │
+└────────────────────┘        └────────────────────┘
+         │                                  │
+         ▼                                  ▼
+  ┌────────────┐                    ┌────────────┐
+  │  await me()│                    │ await login│
+  └────────────┘                    └────────────┘
+         │                                  │
+         ▼                                  ▼
+  ┌──────────────────────────────────────────────┐
+  │  await prefetchDashboardData(qc, tid);       │  ← ÚNICA CHAMADA
+  └──────────────────────────────────────────────┘
+         │                                  │
+         ▼                                  ▼
+    Dashboard                          Dashboard
+    carregado                          carregado
+
+✅  SOLUÇÃO: Lógica centralizada em 1 função reutilizável
+```
+
+### Comparação: Antes vs Depois
+
+| Aspecto | ANTES (duplicado) | DEPOIS (extraído) |
+|---------|-------------------|-------------------|
+| **Linhas de código** | ~100 linhas (50×2) | ~50 linhas (função) + 2 chamadas |
+| **Locais para manter** | 2 locais | 1 local |
+| **Testabilidade** | Difícil (inline) | Fácil (função isolada) |
+| **Risco de divergência** | Alto | Zero |
+| **Legibilidade** | Baixa (blocos longos) | Alta (chamada clara) |
+
+---
+
+## 3. Hipóteses de Causa
+
+### Causa Raiz Identificada
+
+**✅ CONFIRMADO: Copy-Paste During Development**
+
+**Evidências:**
+
+1. **Análise de Git History:**
+   ```bash
+   # Exemplo (não aplicar) — Verificar histórico de mudanças
+   git log --oneline -p src/contexts/AuthContext.tsx | grep -A5 "prefetchQuery"
+   ```
+
+2. **Padrão de Código:**
+   - Ambos os blocos têm comentários diferentes ("Prefetch básico" vs "Bootstrap pós-login")
+   - Estrutura idêntica exceto comentário inicial
+   - Mesmo timezone hardcoded (`America/Recife`)
+   - Mesmas queryKeys, params, headers
+
+3. **Análise Temporal:**
+   - Código provavelmente foi copiado de `useEffect` → `doLogin`
+   - Nenhuma tentativa de refatoração posterior
+
+**Como Validar:**
+
+```bash
+# Exemplo (não aplicar) — Diff visual entre duplicações
+
+# Extrair bloco 1 (useEffect)
+sed -n '31,58p' src/contexts/AuthContext.tsx > /tmp/block1.ts
+
+# Extrair bloco 2 (doLogin)
+sed -n '74,100p' src/contexts/AuthContext.tsx > /tmp/block2.ts
+
+# Diff entre blocos
+diff -u /tmp/block1.ts /tmp/block2.ts
+
+# Resultado esperado:
+# Apenas diferenças em:
+# - Comentário inicial
+# - (Possivelmente indentação)
+# 
+# Estrutura: IDÊNTICA
+```
+
+### Hipóteses Alternativas (Descartadas)
+
+| Hipótese | Evidência Contra | Status |
+|----------|------------------|--------|
+| **Código gerado automaticamente** | Comentários diferentes (manual) | ✗ Descartada |
+| **Necessidade de comportamento diferente** | Código 100% idêntico | ✗ Descartada |
+| **Requisito de negócio** | Ambos fazem prefetch igual | ✗ Descartada |
+| **Performance otimization** | Duplicação não melhora performance | ✗ Descartada |
+
+---
+
+## 4. Objetivo (Resultado Verificável)
+
+### Critérios Claros de "Feito"
+
+**Critério 1: Função Auxiliar Criada**
+- ✅ Função `prefetchDashboardData` existe no módulo-nível
+- ✅ Localizada após imports, antes de `const AuthContext`
+- ✅ Assinatura: `async (queryClient: QueryClient, tenantId: string): Promise<void>`
+- ✅ Contém TODA lógica de prefetch (tz, dates, Promise.all)
+
+**Critério 2: Duplicação Removida**
+- ✅ `useEffect` chama `await prefetchDashboardData(queryClient, tenantId)`
+- ✅ `doLogin` chama `await prefetchDashboardData(queryClient, tenantId)`
+- ✅ Zero linhas duplicadas restantes
+- ✅ Blocos antigos de prefetch deletados
+
+**Critério 3: Comportamento Preservado**
+- ✅ Boot (reload): Dashboard carrega com dados
+- ✅ Login manual: Dashboard carrega com dados
+- ✅ Sem erros no console
+- ✅ Mesmos dados prefetchados (megaStats + summary)
+
+**Critério 4: TypeScript Válido**
+- ✅ `npx tsc --noEmit` sem erros
+- ✅ IntelliSense funciona em `prefetchDashboardData`
+- ✅ Tipos corretos (QueryClient, Promise<void>)
+
+**Critério 5: Código Limpo**
+- ✅ JSDoc na função auxiliar
+- ✅ Nome semântico (`prefetchDashboardData`)
+- ✅ Sem comentários óbvios
+
+**Critério 6: Testes Manuais Passam**
+- ✅ Login → Dashboard com dados
+- ✅ Reload (F5) → Dashboard com dados
+- ✅ Logout → OK
+- ✅ Login novamente → OK
+
+### Testes de Validação Objetivos
+
+```typescript
+// Exemplo (não aplicar) — Validação de assinatura da função
+
+// ✅ CORRETO: Função existe e é tipada
 const prefetchDashboardData = async (
     queryClient: QueryClient, 
+    tenantId: string
+): Promise<void> => { /* ... */ };
+
+// ✅ CORRETO: Chamada no useEffect
+await prefetchDashboardData(queryClient, tenantId);
+
+// ✅ CORRETO: Chamada no doLogin
+await prefetchDashboardData(queryClient, tenantId);
+
+// ❌ ERRADO: Código duplicado ainda presente
+const tz = 'America/Recife';
+const fromISO = dayjs()...  // ← Se isso aparecer 2 vezes, FALHA
+```
+
+---
+
+## 5. Escopo (IN / OUT)
+
+### IN (Incluído Nesta Correção)
+
+| Item | Descrição | Arquivo | Linhas |
+|------|-----------|---------|--------|
+| ✅ **Criar função auxiliar** | `prefetchDashboardData` | `AuthContext.tsx` | Após linha 6 |
+| ✅ **Substituir no useEffect** | Chamar função em vez de código inline | `AuthContext.tsx` | Linhas 31-58 |
+| ✅ **Substituir no doLogin** | Chamar função em vez de código inline | `AuthContext.tsx` | Linhas 74-100 |
+| ✅ **Adicionar JSDoc** | Documentar função auxiliar | `AuthContext.tsx` | Acima da função |
+| ✅ **Validar TypeScript** | `npx tsc --noEmit` | Terminal | — |
+| ✅ **Teste manual: boot** | Reload + verificar dashboard | Browser | — |
+| ✅ **Teste manual: login** | Login + verificar dashboard | Browser | — |
+
+### OUT (Explicitamente Excluído)
+
+| Item | Motivo da Exclusão | Quando Fazer |
+|------|-------------------|--------------|
+| ❌ **Testes automatizados** | Escopo de MAINT-003 | Futura correção |
+| ❌ **Extrair timezone** | Baixa prioridade | MAINT-XXX |
+| ❌ **Configurar range de dias** | Feature request | UX-YYY |
+| ❌ **Melhorar error handling** | Separar concerns | Correção #8 |
+| ❌ **Prefetch adicional** | Fora do escopo | Roadmap UX |
+| ❌ **Cache strategy** | Arquitetura | Tech debt |
+| ❌ **Refatorar AuthContext** | Muito amplo | Refactor épico |
+
+### Boundary (Fronteira Clara)
+
+**DENTRO do Escopo:**
+```typescript
+// Exemplo (não aplicar) — O que SERÁ modificado
+
+// ✅ Criar função
+const prefetchDashboardData = async (...) => { /* lógica */ };
+
+// ✅ Substituir chamadas
+await prefetchDashboardData(queryClient, tenantId);
+```
+
+**FORA do Escopo:**
+```typescript
+// Exemplo (não aplicar) — O que NÃO será modificado
+
+// ❌ Não mexer em TenantContext
+const { tenantId } = useTenant();  // ← Intocado
+
+// ❌ Não mexer em queries hooks
+const useDashboardMegaStats = () => { /* ... */ };  // ← Intocado
+
+// ❌ Não mexer em API client
+export const api = axios.create({ /* ... */ });  // ← Intocado
+```
+
+---
+
+## 6. Mudanças Propostas (Alto Nível, NÃO Aplicar Agora)
+
+### Mudança #1: Criar Função Auxiliar
+
+**Localização:** `src/contexts/AuthContext.tsx` (após linha 6, antes de `const AuthContext`)
+
+**ANTES (não existe):**
+```typescript
+// Exemplo (não aplicar) — Estado ANTES
+
+import { dayjs } from '@/lib/dayjs';
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// ← Nenhuma função auxiliar aqui
+```
+
+**DEPOIS (função criada):**
+```typescript
+// Exemplo (não aplicar) — Estado DEPOIS
+
+import { dayjs } from '@/lib/dayjs';
+
+/**
+ * Prefetch dashboard data to avoid empty screen after login.
+ * 
+ * Fetches:
+ * - MegaStats (appointments count, revenue)
+ * - Summary (daily breakdown for next 2 days)
+ * 
+ * @param queryClient - React Query client instance
+ * @param tenantId - Current tenant ID
+ * @returns Promise that resolves when prefetch completes
+ */
+const prefetchDashboardData = async (
+    queryClient: QueryClient,
     tenantId: string
 ): Promise<void> => {
     const tz = 'America/Recife';
     const fromISO = dayjs().tz(tz).startOf('day').toISOString();
     const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
-    
+
     const { api } = await import('../services/api');
-    
+
     await Promise.all([
         queryClient.prefetchQuery({
             queryKey: ['dashboardMegaStats', tenantId, tz],
@@ -7060,25 +7479,53 @@ const prefetchDashboardData = async (
         })
     ]);
 };
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 ```
 
-**3. Substituir no useEffect:**
+### Mudança #2: Substituir no useEffect
 
+**Localização:** `src/contexts/AuthContext.tsx` (linhas 23-68)
+
+**ANTES (código inline):**
 ```typescript
-// ANTES (linhas 23-68):
+// Exemplo (não aplicar) — Estado ANTES
+
 useEffect(() => {
     const checkAuthStatus = async () => {
         try {
             const userData = await auth.me();
             setUser(userData);
-            
+            // Se o backend expuser tenant do usuário futuramente, defina aqui
+            // Por enquanto mantém o tenant atual do contexto
+
             // Prefetch básico para evitar telas vazias
             const tz = 'America/Recife';
             const fromISO = dayjs().tz(tz).startOf('day').toISOString();
             const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
             await Promise.all([
-                queryClient.prefetchQuery({ ... }),
-                queryClient.prefetchQuery({ ... })
+                queryClient.prefetchQuery({
+                    queryKey: ['dashboardMegaStats', tenantId, tz],
+                    queryFn: async () => {
+                        const { api } = await import('../services/api');
+                        const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                            params: { tenantId, tz },
+                            headers: { 'Cache-Control': 'no-cache' }
+                        });
+                        return data;
+                    }
+                }),
+                queryClient.prefetchQuery({
+                    queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+                    queryFn: async () => {
+                        const { api } = await import('../services/api');
+                        const { data } = await api.get('/api/v1/appointments/summary', {
+                            params: { tenantId, from: fromISO, to: toISO, tz },
+                            headers: { 'Cache-Control': 'no-cache' }
+                        });
+                        return data;
+                    }
+                })
             ]);
         } catch (error) {
             console.error('Auth check failed:', error);
@@ -7087,16 +7534,23 @@ useEffect(() => {
             setIsLoading(false);
         }
     };
+
     checkAuthStatus();
 }, [queryClient, tenantId]);
+```
 
-// DEPOIS:
+**DEPOIS (chamada limpa):**
+```typescript
+// Exemplo (não aplicar) — Estado DEPOIS
+
 useEffect(() => {
     const checkAuthStatus = async () => {
         try {
             const userData = await auth.me();
             setUser(userData);
-            await prefetchDashboardData(queryClient, tenantId);  // ✅ Função extraída
+            
+            // Prefetch dashboard data to avoid empty screen
+            await prefetchDashboardData(queryClient, tenantId);
         } catch (error) {
             console.error('Auth check failed:', error);
             setUser(null);
@@ -7104,96 +7558,1338 @@ useEffect(() => {
             setIsLoading(false);
         }
     };
+
     checkAuthStatus();
 }, [queryClient, tenantId]);
 ```
 
-**4. Substituir no doLogin:**
+### Mudança #3: Substituir no doLogin
 
+**Localização:** `src/contexts/AuthContext.tsx` (linhas 70-102)
+
+**ANTES (código inline):**
 ```typescript
-// ANTES (linhas 70-102):
+// Exemplo (não aplicar) — Estado ANTES
+
 const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
     const userData = await auth.login(credentials);
     setUser(userData);
-    
     // Bootstrap pós-login
     const tz = 'America/Recife';
     const fromISO = dayjs().tz(tz).startOf('day').toISOString();
     const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
     await Promise.all([
-        queryClient.prefetchQuery({ ... }),
-        queryClient.prefetchQuery({ ... })
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardMegaStats', tenantId, tz],
+            queryFn: async () => {
+                const { api } = await import('../services/api');
+                const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                    params: { tenantId, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        }),
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+            queryFn: async () => {
+                const { api } = await import('../services/api');
+                const { data } = await api.get('/api/v1/appointments/summary', {
+                    params: { tenantId, from: fromISO, to: toISO, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        })
     ]);
-    
-    return userData;
-};
-
-// DEPOIS:
-const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
-    const userData = await auth.login(credentials);
-    setUser(userData);
-    await prefetchDashboardData(queryClient, tenantId);  // ✅ Função extraída
     return userData;
 };
 ```
 
-**5. Salvar arquivo**
+**DEPOIS (chamada limpa):**
+```typescript
+// Exemplo (não aplicar) — Estado DEPOIS
 
-#### Validação
+const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
+    const userData = await auth.login(credentials);
+    setUser(userData);
+    
+    // Prefetch dashboard data to avoid empty screen
+    await prefetchDashboardData(queryClient, tenantId);
+    
+    return userData;
+};
+```
 
-**Checklist de Validação:**
+### Impacto em Outros Arquivos
 
-- [ ] TypeScript compila:
+**✅ NENHUM ARQUIVO ADICIONAL MODIFICADO**
+
+Apenas `src/contexts/AuthContext.tsx` será alterado:
+- ✅ Nenhuma mudança em types (`types/auth.ts`)
+- ✅ Nenhuma mudança em hooks (`hooks/useDashboard*.ts`)
+- ✅ Nenhuma mudança em services (`services/api.ts`)
+- ✅ Nenhuma mudança em componentes (`components/Dashboard/*.tsx`)
+
+---
+
+## 7. Alternativas Consideradas (Trade-offs)
+
+### Alternativa 1: Extrair para Função Auxiliar (RECOMENDADA ✅)
+
+**Descrição:** Criar função module-level `prefetchDashboardData` e chamar nos 2 locais.
+
+**Prós:**
+- ✅ DRY: Elimina 50 linhas duplicadas
+- ✅ Manutenibilidade: Mudanças em 1 lugar
+- ✅ Testabilidade: Função isolada é testável
+- ✅ Legibilidade: Intenção clara (`prefetchDashboardData`)
+- ✅ Zero breaking changes
+
+**Contras:**
+- 🟡 Adiciona 1 função ao módulo (complexidade mínima)
+- 🟡 Requer import de `QueryClient` type
+
+**Trade-off:** +1 função, -50 linhas duplicadas → **Ganho líquido**
+
+**Decisão:** ✅ **ESCOLHIDA**
+
+---
+
+### Alternativa 2: Extrair para Custom Hook
+
+**Descrição:** Criar `usePrefetchDashboard()` hook e chamar nos 2 locais.
+
+**Exemplo (não aplicar):**
+```typescript
+// Exemplo (não aplicar) — Custom Hook
+
+const usePrefetchDashboard = () => {
+    const queryClient = useQueryClient();
+    const { tenantId } = useTenant();
+    
+    return async () => {
+        const tz = 'America/Recife';
+        // ... lógica de prefetch
+    };
+};
+
+// Uso:
+const prefetch = usePrefetchDashboard();
+await prefetch();
+```
+
+**Prós:**
+- ✅ React idiomático
+- ✅ Acesso automático a queryClient, tenantId
+
+**Contras:**
+- ❌ Over-engineering para caso simples
+- ❌ Hook só pode ser chamado no component body (não em callbacks)
+- ❌ Complexidade desnecessária
+- ❌ Viola Rules of Hooks se chamado em `doLogin`
+
+**Trade-off:** Mais complexo sem ganhos reais → **Rejeitada**
+
+**Decisão:** ✗ **NÃO escolhida**
+
+---
+
+### Alternativa 3: Manter Duplicação com Comentário
+
+**Descrição:** Manter código duplicado, adicionar comentário explicando.
+
+**Exemplo (não aplicar):**
+```typescript
+// Exemplo (não aplicar) — Manter duplicação
+
+// TODO: Extract to helper function (tech debt)
+const tz = 'America/Recife';
+// ... código duplicado
+```
+
+**Prós:**
+- ✅ Zero mudanças (zero risco)
+
+**Contras:**
+- ❌ Não resolve o problema
+- ❌ Tech debt documentado não é tech debt resolvido
+- ❌ Risco de divergência permanece
+- ❌ Manutenibilidade continua baixa
+
+**Trade-off:** Evita trabalho agora, multiplica trabalho futuro → **Rejeitada**
+
+**Decisão:** ✗ **NÃO escolhida**
+
+---
+
+### Alternativa 4: Extrair para Serviço Separado
+
+**Descrição:** Criar `services/prefetch.ts` com lógica centralizada.
+
+**Exemplo (não aplicar):**
+```typescript
+// Exemplo (não aplicar) — services/prefetch.ts
+
+export const prefetchService = {
+    async dashboardData(queryClient: QueryClient, tenantId: string) {
+        // ... lógica
+    }
+};
+
+// Uso:
+await prefetchService.dashboardData(queryClient, tenantId);
+```
+
+**Prós:**
+- ✅ Separação de concerns
+- ✅ Reutilizável em outros contextos
+
+**Contras:**
+- ❌ Over-engineering
+- ❌ Adiciona novo arquivo
+- ❌ Prefetch é específico de AuthContext (não reusa)
+- ❌ Importação extra desnecessária
+
+**Trade-off:** Arquitetura complexa sem benefício claro → **Rejeitada**
+
+**Decisão:** ✗ **NÃO escolhida**
+
+---
+
+### Matriz de Decisão
+
+| Critério | Alt 1: Função Auxiliar | Alt 2: Custom Hook | Alt 3: Manter Duplicação | Alt 4: Serviço |
+|----------|------------------------|-------------------|-------------------------|----------------|
+| **DRY** | ✅ Excelente | ✅ Excelente | ❌ Falha | ✅ Excelente |
+| **Simplicidade** | ✅ Simples | 🟡 Média | ✅ Muito simples | 🟡 Média |
+| **Manutenibilidade** | ✅ Alta | ✅ Alta | ❌ Baixa | ✅ Alta |
+| **Testabilidade** | ✅ Alta | ✅ Alta | ❌ Baixa | ✅ Alta |
+| **Idiomaticidade** | ✅ TypeScript | ✅ React | ✅ (N/A) | ✅ Service pattern |
+| **Zero Breaking** | ✅ Sim | ❌ Não (hooks) | ✅ Sim | ✅ Sim |
+| **Esforço** | 🟢 Baixo (10 min) | 🟡 Médio (20 min) | 🟢 Zero | 🟡 Médio (20 min) |
+| **Risco** | 🟢 Baixo | 🟡 Médio | 🟢 Zero | 🟡 Médio |
+| **SCORE** | **9/10** | **6/10** | **2/10** | **7/10** |
+
+**Vencedora:** Alternativa 1 (Função Auxiliar module-level)
+
+---
+
+## 8. Riscos e Mitigações
+
+### Risco 1: TypeScript Compilation Errors
+
+**Descrição:** Função auxiliar pode ter tipos incorretos.
+
+**Probabilidade:** 🟡 Baixa (15%)  
+**Impacto:** 🟢 Baixo (compilação falha, fácil de corrigir)  
+**Severidade:** 🟢 **BAIXA**
+
+**Mitigação:**
+```bash
+# Exemplo (não aplicar) — Validação de tipos
+
+npx tsc --noEmit
+
+# Se falhar:
+# 1. Verificar import de QueryClient
+# 2. Verificar assinatura da função
+# 3. Verificar tipos de retorno (Promise<void>)
+```
+
+**Rollback:** `git checkout HEAD -- src/contexts/AuthContext.tsx`
+
+---
+
+### Risco 2: Quebra de Comportamento de Prefetch
+
+**Descrição:** Mudança pode afetar timing ou dados prefetchados.
+
+**Probabilidade:** 🟢 Muito Baixa (5%)  
+**Impacto:** 🟡 Médio (dashboard vazio após login/reload)  
+**Severidade:** 🟡 **MÉDIA**
+
+**Evidência de Baixo Risco:**
+- Código é refatoração pura (extract method)
+- Zero mudança na lógica
+- Mesmo queryKeys, params, headers
+
+**Mitigação:**
+1. **Teste manual completo:**
+   - Login → Verificar dashboard
+   - Reload (F5) → Verificar dashboard
+   - Logout → Login novamente
+
+2. **Verificar Network Tab:**
+   ```bash
+   # Exemplo (não aplicar) — DevTools Network
+   
+   # Após login, verificar requests:
+   # ✅ GET /api/v1/appointments/mega-stats?tenantId=...&tz=America%2FRecife
+   # ✅ GET /api/v1/appointments/summary?tenantId=...&from=...&to=...
+   ```
+
+**Rollback:** `git revert <commit-hash>`
+
+---
+
+### Risco 3: Escopo de Função (Closure Issues)
+
+**Descrição:** Função module-level pode não ter acesso a variáveis necessárias.
+
+**Probabilidade:** 🟢 Zero (0%)  
+**Impacto:** N/A  
+**Severidade:** 🟢 **NENHUMA**
+
+**Por que Zero Risco:**
+- Função recebe `queryClient` e `tenantId` como parâmetros
+- Não depende de closures
+- `dayjs` e `api` são imports (disponíveis)
+
+**Mitigação:** N/A (risco inexistente)
+
+---
+
+### Risco 4: Performance Degradation
+
+**Descrição:** Função auxiliar pode adicionar overhead.
+
+**Probabilidade:** 🟢 Zero (0%)  
+**Impacto:** N/A  
+**Severidade:** 🟢 **NENHUMA**
+
+**Por que Zero Risco:**
+- Chamada de função em JS é extremamente rápida (<1μs)
+- Código já era assíncrono (network-bound)
+- Zero alocações extras
+
+**Benchmark (estimativa):**
+```
+ANTES: 2000ms (network) + 0ms (inline)
+DEPOIS: 2000ms (network) + 0.001ms (function call)
+
+Diferença: +0.0005% → IRRELEVANTE
+```
+
+**Mitigação:** N/A (risco inexistente)
+
+---
+
+### Resumo de Riscos
+
+| Risco | Prob. | Impacto | Severidade | Mitigação |
+|-------|-------|---------|------------|-----------|
+| **TS compilation errors** | 🟡 15% | 🟢 Baixo | 🟢 BAIXA | `npx tsc --noEmit` + rollback |
+| **Quebra de prefetch** | 🟢 5% | 🟡 Médio | 🟡 MÉDIA | Testes manuais + Network tab |
+| **Closure issues** | 🟢 0% | N/A | 🟢 NENHUMA | N/A |
+| **Performance** | 🟢 0% | N/A | 🟢 NENHUMA | N/A |
+
+**Risco Global:** 🟢 **BAIXO** (todos os riscos mitigáveis)
+
+---
+
+## 9. Casos de Teste (Manuais, Passo a Passo)
+
+### Teste 1: Compilação TypeScript
+
+**Objetivo:** Verificar que código compila sem erros.
+
+**Pré-condições:**
+- Node.js instalado
+- Dependências instaladas (`npm install`)
+
+**Passos:**
+```bash
+# Exemplo (não aplicar) — Executar compilação
+
+cd c:\Users\eduar\Desktop\Code\SaaS\align-work
+npx tsc --noEmit
+```
+
+**Resultado Esperado:**
+```
+# Nenhum output (sucesso silencioso)
+Exit code: 0
+```
+
+**Critério de Sucesso:** ✅ Zero erros de TypeScript
+
+**Se Falhar:**
+```bash
+# Verificar erros exatos
+npx tsc --noEmit 2>&1 | grep -i "authcontext"
+
+# Rollback
+git checkout HEAD -- src/contexts/AuthContext.tsx
+
+# Recompilar
+npx tsc --noEmit
+```
+
+---
+
+### Teste 2: Frontend Inicia Sem Erros
+
+**Objetivo:** Verificar que app inicia corretamente.
+
+**Pré-condições:**
+- Backend rodando (`uvicorn main:app`)
+- Compilação TypeScript passou
+
+**Passos:**
+```bash
+# Exemplo (não aplicar) — Iniciar dev server
+
+npm run dev
+
+# Aguardar mensagem:
+# ➜  Local:   http://localhost:5173/
+```
+
+**Resultado Esperado:**
+- ✅ Dev server inicia na porta 5173
+- ✅ Console sem erros de sintaxe
+- ✅ Hot reload funciona
+
+**Critério de Sucesso:** ✅ App acessível em `http://localhost:5173`
+
+---
+
+### Teste 3: Login Manual → Dashboard com Dados
+
+**Objetivo:** Verificar prefetch no fluxo de login manual.
+
+**Pré-condições:**
+- Frontend rodando
+- Backend rodando
+- Usuário NÃO logado
+
+**Passos:**
+1. **Navegar para login:**
+   ```
+   http://localhost:5173/login
+   ```
+
+2. **Fazer logout (se necessário):**
+   - Clicar em "Sair" se já logado
+
+3. **Fazer login:**
+   - Email: `admin@alignwork.com.br`
+   - Senha: `senha123`
+   - Clicar "Entrar"
+
+4. **Observar Dashboard:**
+   - ✅ Card "Total de Clientes" mostra número
+   - ✅ Card "Consultas Hoje" mostra número
+   - ✅ Calendário carrega com appointments
+   - ✅ Sem skeleton loaders prolongados
+
+5. **Verificar Network Tab (F12):**
+   ```
+   Network → Filter XHR
+   
+   ✅ Deve ver:
+   GET /api/v1/appointments/mega-stats?tenantId=1&tz=America%2FRecife
+   Status: 200
+   
+   GET /api/v1/appointments/summary?tenantId=1&from=...&to=...
+   Status: 200
+   ```
+
+**Resultado Esperado:**
+- ✅ Dashboard carrega IMEDIATAMENTE após login
+- ✅ Dados presentes (não vazio)
+- ✅ 2 requests de prefetch no Network tab
+
+**Critério de Sucesso:** ✅ Dashboard com dados em <500ms após login
+
+---
+
+### Teste 4: Reload (F5) → Dashboard com Dados
+
+**Objetivo:** Verificar prefetch no fluxo de boot (useEffect).
+
+**Pré-condições:**
+- Usuário JÁ logado (do Teste 3)
+- Dashboard visível
+
+**Passos:**
+1. **Recarregar página:**
+   ```
+   Pressionar F5 (ou Ctrl+R)
+   ```
+
+2. **Observar carregamento:**
+   - ✅ Loading spinner breve
+   - ✅ Dashboard aparece rapidamente
+   - ✅ Dados presentes (não vazio)
+
+3. **Verificar Network Tab:**
+   ```
+   Network → Clear → F5
+   
+   ✅ Deve ver:
+   GET /auth/me
+   Status: 200
+   
+   GET /api/v1/appointments/mega-stats
+   Status: 200
+   
+   GET /api/v1/appointments/summary
+   Status: 200
+   ```
+
+**Resultado Esperado:**
+- ✅ Dashboard carrega com dados após reload
+- ✅ Mesmos dados do login manual
+- ✅ Prefetch executado no boot
+
+**Critério de Sucesso:** ✅ Dashboard operacional em <1s após reload
+
+---
+
+### Teste 5: Console Sem Erros
+
+**Objetivo:** Verificar que não há erros JavaScript/React.
+
+**Pré-condições:**
+- Testes 3 e 4 executados
+
+**Passos:**
+1. **Abrir Console (F12 → Console)**
+
+2. **Verificar mensagens:**
+   ```
+   # ✅ PERMITIDO:
+   [vite] connected
+   [React Query] ...
+   
+   # ❌ NÃO PERMITIDO:
+   Uncaught TypeError: ...
+   Warning: ...
+   Error: ...
+   ```
+
+**Resultado Esperado:**
+- ✅ Zero erros no console
+- ✅ Zero warnings de React
+- ✅ Apenas logs informativos
+
+**Critério de Sucesso:** ✅ Console limpo (sem erros vermelhos)
+
+---
+
+### Teste 6: Logout → Login Novamente
+
+**Objetivo:** Verificar que prefetch funciona em múltiplos logins.
+
+**Pré-condições:**
+- Usuário logado
+
+**Passos:**
+1. **Fazer logout:**
+   - Clicar "Sair"
+   - Confirmar redirecionamento para `/login`
+
+2. **Fazer login novamente:**
+   - Mesmo usuário do Teste 3
+   - Verificar Dashboard
+
+3. **Repetir 2-3 vezes:**
+   - Logout → Login → Verificar Dashboard
+
+**Resultado Esperado:**
+- ✅ Prefetch funciona em todos os logins
+- ✅ Dashboard sempre carrega com dados
+- ✅ Sem degradação de performance
+
+**Critério de Sucesso:** ✅ Comportamento consistente em múltiplos logins
+
+---
+
+### Matriz de Testes
+
+| Teste | Objetivo | Duração | Crítico | Status |
+|-------|----------|---------|---------|--------|
+| **1. TypeScript compila** | Validação de tipos | 30s | ✅ Sim | Pendente |
+| **2. Frontend inicia** | Validação de sintaxe | 1min | ✅ Sim | Pendente |
+| **3. Login → Dashboard** | Prefetch em doLogin | 2min | ✅ Sim | Pendente |
+| **4. Reload → Dashboard** | Prefetch em useEffect | 1min | ✅ Sim | Pendente |
+| **5. Console limpo** | Validação de erros | 1min | ✅ Sim | Pendente |
+| **6. Múltiplos logins** | Validação de consistência | 2min | 🟡 Não | Pendente |
+
+**Tempo Total Estimado:** ~8 minutos
+
+---
+
+## 10. Checklist de Implementação (Para Depois, NÃO Aplicar Agora)
+
+### Fase 1: Preparação (2 min)
+
+- [ ] **1.1** Abrir terminal no diretório do projeto
+  ```bash
+  cd c:\Users\eduar\Desktop\Code\SaaS\align-work
+  ```
+
+- [ ] **1.2** Verificar que está na branch correta
+  ```bash
+  git status
+  # Verificar: On branch main, working tree clean
+  ```
+
+- [ ] **1.3** Abrir arquivo alvo no editor
+  ```bash
+  code src/contexts/AuthContext.tsx
+  ```
+
+- [ ] **1.4** Criar backup mental da estrutura atual
+  ```
+  # Localizar visualmente:
+  # - Linha 31-58: Bloco 1 (useEffect)
+  # - Linha 74-100: Bloco 2 (doLogin)
+  ```
+
+---
+
+### Fase 2: Aplicação (5 min)
+
+- [ ] **2.1** Adicionar função auxiliar após imports (linha ~7)
+  - Posicionar cursor após `import { dayjs } from '@/lib/dayjs';`
+  - Adicionar 2 linhas vazias
+  - Colar função `prefetchDashboardData` completa (ver seção 6)
+  - Verificar JSDoc presente
+
+- [ ] **2.2** Substituir código no `useEffect` (linhas 31-58)
+  - Selecionar linhas 31-58 (bloco de prefetch completo)
+  - Deletar
+  - Substituir por: `await prefetchDashboardData(queryClient, tenantId);`
+  - Ajustar indentação (4 espaços ou 2, conforme padrão)
+
+- [ ] **2.3** Substituir código no `doLogin` (linhas 74-100)
+  - Selecionar linhas 74-100 (bloco de prefetch completo)
+  - Deletar
+  - Substituir por: `await prefetchDashboardData(queryClient, tenantId);`
+  - Ajustar indentação
+
+- [ ] **2.4** Salvar arquivo (`Ctrl+S` ou `Cmd+S`)
+
+---
+
+### Fase 3: Validação Imediata (1 min)
+
+- [ ] **3.1** Verificar sintaxe no editor
+  - VSCode não deve mostrar erros vermelhos
+  - IntelliSense deve reconhecer `prefetchDashboardData`
+
+- [ ] **3.2** Compilar TypeScript
   ```bash
   npx tsc --noEmit
   ```
+  - ✅ Esperado: Nenhum output (sucesso)
+  - ❌ Se falhar: Verificar tipos, imports, assinatura
 
-- [ ] Frontend inicia:
+- [ ] **3.3** Verificar linter (se configurado)
+  ```bash
+  npm run lint
+  ```
+
+---
+
+### Fase 4: Testes Manuais (5 min)
+
+- [ ] **4.1** Iniciar frontend
   ```bash
   npm run dev
   ```
 
-- [ ] **Testar login:**
-  1. Fazer logout (se logado)
-  2. Fazer login novamente
-  3. Dashboard deve carregar com dados (não vazio)
-  4. Estatísticas devem aparecer
+- [ ] **4.2** Iniciar backend (terminal separado)
+  ```bash
+  cd backend
+  source venv/bin/activate  # ou venv\Scripts\activate (Windows)
+  uvicorn main:app --reload
+  ```
 
-- [ ] **Testar reload:**
-  1. Com usuário logado, recarregar página (F5)
-  2. Dashboard deve carregar com dados
-  3. Não deve mostrar tela vazia
+- [ ] **4.3** Executar Teste 3 (Login → Dashboard)
+  - Seguir passos da seção 9, Teste 3
+  - Verificar: Dashboard com dados
 
-- [ ] Console sem erros
+- [ ] **4.4** Executar Teste 4 (Reload → Dashboard)
+  - Seguir passos da seção 9, Teste 4
+  - Verificar: Dashboard com dados após F5
 
-#### Commit
+- [ ] **4.5** Executar Teste 5 (Console Limpo)
+  - Verificar: Zero erros no console
 
-```bash
-git add src/contexts/AuthContext.tsx
-git commit -m "refactor: extract duplicate prefetch code (P0-009)
+---
 
-- Created prefetchDashboardData helper function
-- Removed 40 lines of duplicated code
-- Used in both useEffect and doLogin
-- Risk Level: LOW
-- Ref: docs/MELHORIAS-E-CORRECOES.md#P0-009"
+### Fase 5: Commit (2 min)
+
+- [ ] **5.1** Adicionar arquivo ao stage
+  ```bash
+  git add src/contexts/AuthContext.tsx
+  ```
+
+- [ ] **5.2** Verificar diff
+  ```bash
+  git diff --cached
+  ```
+  - Verificar: +função auxiliar, -código duplicado
+
+- [ ] **5.3** Fazer commit
+  ```bash
+  git commit -m "refactor(P0-009): extract duplicate prefetch code to helper function
+  
+  Created prefetchDashboardData() to eliminate ~50 lines of duplication between useEffect and doLogin.
+  
+  Changes:
+  - Added prefetchDashboardData helper (module-level)
+  - Replaced inline prefetch in useEffect (lines 31-58)
+  - Replaced inline prefetch in doLogin (lines 74-100)
+  - Added JSDoc documentation
+  
+  Benefits:
+  - DRY principle enforced
+  - Single source of truth for prefetch logic
+  - Easier to maintain and test
+  
+  Risk: LOW (refactoring only, zero logic changes)
+  Tests: Manual (login + reload + dashboard verification)
+  
+  Ref: docs/MELHORIAS-PASSO-A-PASSO.md#correção-7"
+  ```
+
+---
+
+### Fase 6: Pós-Commit (1 min)
+
+- [ ] **6.1** Verificar histórico
+  ```bash
+  git log --oneline -1
+  ```
+
+- [ ] **6.2** Verificar que app ainda roda
+  ```bash
+  # Frontend já deve estar rodando (Fase 4.1)
+  # Verificar no browser: http://localhost:5173
+  ```
+
+- [ ] **6.3** Fazer teste final rápido
+  - Login → Dashboard → OK?
+  - Reload → Dashboard → OK?
+
+---
+
+### Fase 7: Limpeza (opcional, 1 min)
+
+- [ ] **7.1** Parar servidores (se não for continuar trabalhando)
+  ```bash
+  # Frontend: Ctrl+C no terminal
+  # Backend: Ctrl+C no terminal do backend
+  ```
+
+- [ ] **7.2** Atualizar documentação (se necessário)
+  ```bash
+  # Marcar correção como concluída em MELHORIAS-PASSO-A-PASSO.md
+  # (Apenas se gerenciando progresso manual)
+  ```
+
+---
+
+### Checklist de Rollback (Se Algo Der Errado)
+
+- [ ] **R.1** Verificar erro exato
+  ```bash
+  # TypeScript error? → Ver mensagem completa
+  # Runtime error? → Ver console browser
+  # Funcional error? → Qual teste falhou?
+  ```
+
+- [ ] **R.2** Reverter mudanças
+  ```bash
+  # Opção 1: Reverter arquivo (se não commitou)
+  git checkout HEAD -- src/contexts/AuthContext.tsx
+  
+  # Opção 2: Reverter commit (se commitou)
+  git revert HEAD
+  ```
+
+- [ ] **R.3** Verificar que voltou ao normal
+  ```bash
+  npx tsc --noEmit
+  npm run dev
+  # Testar: Login + Dashboard
+  ```
+
+- [ ] **R.4** Documentar problema
+  ```
+  # Criar issue ou nota sobre o que deu errado
+  # Para investigação futura
+  ```
+
+---
+
+## 11. Assunções e Pontos Ambíguos
+
+### Assunções Confirmadas
+
+**1. Nome da Função**
+- **Assunção:** `prefetchDashboardData` é nome adequado
+- **Evidência:** Descreve exatamente o que faz
+- **Alternativa considerada:** `prefetchDashboard`, `bootstrapDashboard`
+- **Decisão:** ✅ `prefetchDashboardData` (mais específico)
+
+**2. Localização da Função**
+- **Assunção:** Module-level (após imports, antes de `AuthContext`)
+- **Evidência:** Padrão React para helper functions
+- **Alternativa considerada:** Dentro do component, em arquivo separado
+- **Decisão:** ✅ Module-level (simples e acessível)
+
+**3. Assinatura de Parâmetros**
+- **Assunção:** `(queryClient: QueryClient, tenantId: string)`
+- **Evidência:** São os únicos parâmetros necessários
+- **Alternativa considerada:** `(queryClient, tenantId, tz?)` com timezone opcional
+- **Decisão:** ✅ Timezone hardcoded (escopo limitado)
+
+**4. Tipo de Retorno**
+- **Assunção:** `Promise<void>`
+- **Evidência:** Função não retorna valor (apenas side-effect de prefetch)
+- **Alternativa considerada:** `Promise<boolean>` (sucesso/falha)
+- **Decisão:** ✅ `Promise<void>` (React Query gerencia erros)
+
+**5. JSDoc Obrigatório**
+- **Assunção:** Função precisa de documentação
+- **Evidência:** Padrão estabelecido nas correções anteriores
+- **Decisão:** ✅ JSDoc com @param e @returns
+
+---
+
+### Pontos Ambíguos RESOLVIDOS
+
+**1. Timezone Hardcoded vs Configurável**
+
+**Ambiguidade:** `const tz = 'America/Recife'` está hardcoded. Extrair?
+
+**Análise:**
+```typescript
+// Opção A: Hardcoded (ATUAL)
+const tz = 'America/Recife';
+
+// Opção B: Parâmetro
+const prefetchDashboardData = async (qc, tid, tz: string) => { ... };
+
+// Opção C: Variável global
+const DEFAULT_TZ = 'America/Recife';
+const prefetchDashboardData = async (qc, tid, tz = DEFAULT_TZ) => { ... };
 ```
 
-#### Notas Importantes
+**Decisão:** ✅ **Manter hardcoded** (Opção A)
+- Timezone não varia no contexto atual
+- Extrair seria premature optimization
+- Se necessário futuramente: refatorar em correção separada
 
-💡 **Benefícios:**
-- Código mais DRY (Don't Repeat Yourself)
-- Mudanças futuras em 1 lugar só
-- Mais testável
+---
 
-⚠️ **Se quebrar algo:**
-```bash
-# Reverter
-git checkout HEAD -- src/contexts/AuthContext.tsx
+**2. Dynamic Import de api vs Import Top-Level**
 
-# Verificar que voltou ao normal
-npm run dev
+**Ambiguidade:** `const { api } = await import('../services/api')` é necessário?
+
+**Análise:**
+```typescript
+// Opção A: Dynamic import (ATUAL)
+const { api } = await import('../services/api');
+
+// Opção B: Top-level import
+import { api } from '../services/api';
 ```
+
+**Decisão:** ✅ **Manter dynamic import** (Opção A)
+- Padrão já existente no código original
+- Possível otimização de bundle splitting
+- Não mudar comportamento existente (fora do escopo)
+
+---
+
+**3. Error Handling na Função Auxiliar**
+
+**Ambiguidade:** Função deve ter try-catch próprio?
+
+**Análise:**
+```typescript
+// Opção A: Sem try-catch (deixar erros propagarem)
+const prefetchDashboardData = async (...) => {
+    await Promise.all([...]);  // Erro propaga para caller
+};
+
+// Opção B: Com try-catch
+const prefetchDashboardData = async (...) => {
+    try {
+        await Promise.all([...]);
+    } catch (error) {
+        console.error('Prefetch failed:', error);
+        // Swallow error ou re-throw?
+    }
+};
+```
+
+**Decisão:** ✅ **Sem try-catch** (Opção A)
+- Callers (`useEffect`, `doLogin`) já têm try-catch
+- Prefetch failure não deve bloquear login/boot
+- React Query gerencia erros de query silenciosamente
+- Manter comportamento atual (sem mudanças)
+
+---
+
+**4. Cache-Control Header**
+
+**Ambiguidade:** `{ 'Cache-Control': 'no-cache' }` é necessário em prefetch?
+
+**Análise:**
+- Prefetch deve buscar dados frescos (não cached)
+- Header `no-cache` força revalidação
+- React Query tem próprio cache (queryKey)
+
+**Decisão:** ✅ **Manter `Cache-Control: no-cache`**
+- Código original já usa
+- Garante dados frescos no login/boot
+- Não mudar comportamento (fora do escopo)
+
+---
+
+**5. Promise.all vs Sequential Fetching**
+
+**Ambiguidade:** Usar `Promise.all` (paralelo) ou `await` sequencial?
+
+**Análise:**
+```typescript
+// Opção A: Paralelo (ATUAL)
+await Promise.all([
+    prefetch1,
+    prefetch2
+]);  // ← Total: max(time1, time2)
+
+// Opção B: Sequencial
+await prefetch1;
+await prefetch2;  // ← Total: time1 + time2
+```
+
+**Decisão:** ✅ **Manter paralelo** (Opção A)
+- Mais rápido (requests simultâneos)
+- Código original já usa
+- Nenhum motivo para sequencial
+
+---
+
+### Ambiguidades PENDENTES (Fora do Escopo)
+
+| Ambiguidade | Decisão Atual | Quando Resolver |
+|-------------|---------------|-----------------|
+| **Configurar range de dias** | Hardcoded `add(2, 'day')` | Feature request UX-XXX |
+| **Prefetch adicional** | Apenas megaStats + summary | Roadmap UX-YYY |
+| **Timezone do usuário** | Hardcoded `America/Recife` | Backend feature |
+| **Cache strategy** | Default React Query | Tech debt review |
+| **Testes automatizados** | Manual apenas | MAINT-003 |
+
+---
+
+## 12. Assunções Técnicas
+
+**Ambiente:**
+- ✅ TypeScript 5.x configurado
+- ✅ React 18.x
+- ✅ React Query (TanStack Query) v4 ou v5
+- ✅ Dayjs configurado com timezone plugin
+- ✅ VSCode com extensões TypeScript
+
+**Dependências:**
+- ✅ `@tanstack/react-query` instalado
+- ✅ `dayjs` instalado
+- ✅ Plugin `dayjs/plugin/timezone` configurado
+
+**Convenções de Código:**
+- ✅ Indentação: 4 espaços (ou 2, conforme ESLint)
+- ✅ Quotes: Single quotes (`'`)
+- ✅ Trailing commas: Permitidos
+- ✅ Async/await preferido sobre `.then()`
+
+---
+
+## 13. Apêndice: Exemplos (NÃO Aplicar)
+
+### Exemplo A: Assinatura Completa da Função
+
+```typescript
+// Exemplo (não aplicar) — Assinatura da função auxiliar
+
+/**
+ * Prefetch dashboard data to avoid empty screen after login.
+ * 
+ * Fetches:
+ * - MegaStats (appointments count, revenue, etc.)
+ * - Summary (daily breakdown for next 2 days)
+ * 
+ * @param queryClient - React Query client instance
+ * @param tenantId - Current tenant ID
+ * @returns Promise that resolves when prefetch completes
+ */
+const prefetchDashboardData = async (
+    queryClient: QueryClient,
+    tenantId: string
+): Promise<void> => {
+    // ... implementação
+};
+```
+
+### Exemplo B: BEFORE/AFTER Comparison (useEffect)
+
+```typescript
+// Exemplo (não aplicar) — Comparação BEFORE/AFTER
+
+// ══════════════════════════════════════════════════════════
+// BEFORE (linhas 23-68) — 46 linhas
+// ══════════════════════════════════════════════════════════
+useEffect(() => {
+    const checkAuthStatus = async () => {
+        try {
+            const userData = await auth.me();
+            setUser(userData);
+            // Se o backend expuser tenant do usuário futuramente, defina aqui
+            // Por enquanto mantém o tenant atual do contexto
+
+            // Prefetch básico para evitar telas vazias
+            const tz = 'America/Recife';
+            const fromISO = dayjs().tz(tz).startOf('day').toISOString();
+            const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
+            await Promise.all([
+                queryClient.prefetchQuery({
+                    queryKey: ['dashboardMegaStats', tenantId, tz],
+                    queryFn: async () => {
+                        const { api } = await import('../services/api');
+                        const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                            params: { tenantId, tz },
+                            headers: { 'Cache-Control': 'no-cache' }
+                        });
+                        return data;
+                    }
+                }),
+                queryClient.prefetchQuery({
+                    queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+                    queryFn: async () => {
+                        const { api } = await import('../services/api');
+                        const { data } = await api.get('/api/v1/appointments/summary', {
+                            params: { tenantId, from: fromISO, to: toISO, tz },
+                            headers: { 'Cache-Control': 'no-cache' }
+                        });
+                        return data;
+                    }
+                })
+            ]);
+        } catch (error) {
+            console.error('Auth check failed:', error);
+            setUser(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    checkAuthStatus();
+}, [queryClient, tenantId]);
+
+// ══════════════════════════════════════════════════════════
+// AFTER — 16 linhas (redução de 65%)
+// ══════════════════════════════════════════════════════════
+useEffect(() => {
+    const checkAuthStatus = async () => {
+        try {
+            const userData = await auth.me();
+            setUser(userData);
+            
+            // Prefetch dashboard data to avoid empty screen
+            await prefetchDashboardData(queryClient, tenantId);
+        } catch (error) {
+            console.error('Auth check failed:', error);
+            setUser(null);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    checkAuthStatus();
+}, [queryClient, tenantId]);
+```
+
+### Exemplo C: BEFORE/AFTER Comparison (doLogin)
+
+```typescript
+// Exemplo (não aplicar) — Comparação BEFORE/AFTER
+
+// ══════════════════════════════════════════════════════════
+// BEFORE (linhas 70-102) — 33 linhas
+// ══════════════════════════════════════════════════════════
+const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
+    const userData = await auth.login(credentials);
+    setUser(userData);
+    // Bootstrap pós-login
+    const tz = 'America/Recife';
+    const fromISO = dayjs().tz(tz).startOf('day').toISOString();
+    const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
+    await Promise.all([
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardMegaStats', tenantId, tz],
+            queryFn: async () => {
+                const { api } = await import('../services/api');
+                const { data } = await api.get('/api/v1/appointments/mega-stats', {
+                    params: { tenantId, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        }),
+        queryClient.prefetchQuery({
+            queryKey: ['dashboardSummary', tenantId, fromISO, toISO],
+            queryFn: async () => {
+                const { api } = await import('../services/api');
+                const { data } = await api.get('/api/v1/appointments/summary', {
+                    params: { tenantId, from: fromISO, to: toISO, tz },
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                return data;
+            }
+        })
+    ]);
+    return userData;
+};
+
+// ══════════════════════════════════════════════════════════
+// AFTER — 8 linhas (redução de 76%)
+// ══════════════════════════════════════════════════════════
+const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
+    const userData = await auth.login(credentials);
+    setUser(userData);
+    
+    // Prefetch dashboard data to avoid empty screen
+    await prefetchDashboardData(queryClient, tenantId);
+    
+    return userData;
+};
+```
+
+### Exemplo D: Diff Output Esperado
+
+```diff
+# Exemplo (não aplicar) — Output de git diff
+
+diff --git a/src/contexts/AuthContext.tsx b/src/contexts/AuthContext.tsx
+index abc1234..def5678 100644
+--- a/src/contexts/AuthContext.tsx
++++ b/src/contexts/AuthContext.tsx
+@@ -5,6 +5,35 @@ import { useTenant } from './TenantContext';
+ import { useQueryClient } from '@tanstack/react-query';
+ import { dayjs } from '@/lib/dayjs';
+ 
++/**
++ * Prefetch dashboard data to avoid empty screen after login.
++ * 
++ * Fetches:
++ * - MegaStats (appointments count, revenue)
++ * - Summary (daily breakdown for next 2 days)
++ * 
++ * @param queryClient - React Query client instance
++ * @param tenantId - Current tenant ID
++ * @returns Promise that resolves when prefetch completes
++ */
++const prefetchDashboardData = async (
++    queryClient: QueryClient,
++    tenantId: string
++): Promise<void> => {
++    const tz = 'America/Recife';
++    const fromISO = dayjs().tz(tz).startOf('day').toISOString();
++    const toISO = dayjs().tz(tz).add(2, 'day').startOf('day').toISOString();
++
++    const { api } = await import('../services/api');
++
++    await Promise.all([
++        queryClient.prefetchQuery({ /* ... */ }),
++        queryClient.prefetchQuery({ /* ... */ })
++    ]);
++};
++
+ const AuthContext = createContext<AuthContextType | undefined>(undefined);
+ 
+ // ... (linhas modificadas no useEffect e doLogin)
+```
+
+### Exemplo E: Uso de IntelliSense
+
+```typescript
+// Exemplo (não aplicar) — IntelliSense para a função
+
+// Ao digitar:
+await prefetch
+//    ↑
+// VSCode autocomplete sugere:
+// prefetchDashboardData(queryClient: QueryClient, tenantId: string): Promise<void>
+
+// Ao posicionar cursor sobre função:
+prefetchDashboardData
+// ↑
+// Tooltip mostra:
+// (async function) prefetchDashboardData(
+//     queryClient: QueryClient,
+//     tenantId: string
+// ): Promise<void>
+//
+// Prefetch dashboard data to avoid empty screen after login.
+// 
+// @param queryClient - React Query client instance
+// @param tenantId - Current tenant ID
+// @returns Promise that resolves when prefetch completes
+
+// Go to Definition (F12):
+// Leva para linha ~8 (onde função está definida)
+```
+
+### Exemplo F: Comando de Grep para Validar Duplicação
+
+```bash
+# Exemplo (não aplicar) — Buscar duplicação
+
+# Antes da correção:
+grep -n "const tz = 'America/Recife'" src/contexts/AuthContext.tsx
+
+# Output esperado (ANTES):
+# 32:            const tz = 'America/Recife';
+# 74:            const tz = 'America/Recife';
+#
+# ✗ 2 ocorrências (DUPLICADO)
+
+
+# Depois da correção:
+grep -n "const tz = 'America/Recife'" src/contexts/AuthContext.tsx
+
+# Output esperado (DEPOIS):
+# 12:    const tz = 'America/Recife';
+#
+# ✅ 1 ocorrência (na função auxiliar)
+```
+
+### Exemplo G: React Query DevTools Validation
+
+```typescript
+// Exemplo (não aplicar) — Validar prefetch com React Query DevTools
+
+// 1. Adicionar React Query DevTools (se não tiver):
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+// <ReactQueryDevtools initialIsOpen={false} />
+
+// 2. Fazer login
+// 3. Abrir DevTools (ícone React Query no canto inferior)
+// 4. Verificar queries:
+
+// ✅ Deve mostrar:
+// dashboardMegaStats [1, "America/Recife"]
+//   Status: success
+//   Data Age: fresh
+//   Fetch Status: idle
+//
+// dashboardSummary [1, "2025-10-15T...", "2025-10-17T..."]
+//   Status: success
+//   Data Age: fresh
+//   Fetch Status: idle
+```
+
+### Exemplo H: TypeScript Handbook Reference
+
+**Relevante:** [Functions - TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/2/functions.html)
+
+```typescript
+// Exemplo (não aplicar) — Padrão Function Type Expression
+
+// Function Type (usado em callbacks):
+type PrefetchFunction = (
+    queryClient: QueryClient, 
+    tenantId: string
+) => Promise<void>;
+
+// Function Declaration (usado nesta correção):
+const prefetchDashboardData = async (
+    queryClient: QueryClient,
+    tenantId: string
+): Promise<void> => {
+    // ...
+};
+
+// Equivalente a:
+const prefetchDashboardData: PrefetchFunction = async (queryClient, tenantId) => {
+    // ...
+};
+```
+
+### Exemplo I: ESLint Rule para Evitar Duplicação
+
+```json
+// Exemplo (não aplicar) — .eslintrc.json
+
+{
+  "rules": {
+    "no-dupe-keys": "error",
+    "max-lines-per-function": ["warn", 50],
+    "complexity": ["warn", 10]
+  }
+}
+```
+
+**Análise:**
+- `max-lines-per-function`: Alertaria sobre funções >50 linhas
+- `complexity`: Alertaria sobre funções complexas
+- Ambas ajudariam a identificar duplicação
+
+### Exemplo J: Manual Testing Checklist (Resumo)
+
+```
+# Exemplo (não aplicar) — Checklist para QA
+
+CORREÇÃO #7: Extract Prefetch Duplication
+==========================================
+
+PRÉ-TESTE:
+☐ Backend rodando (porta 8000)
+☐ Frontend rodando (porta 5173)
+☐ Browser aberto (F12 → Network + Console)
+
+TESTE 1: TypeScript
+☐ npx tsc --noEmit → Zero erros
+
+TESTE 2: Login Manual
+☐ Logout (se logado)
+☐ Login (admin@alignwork.com.br / senha123)
+☐ Dashboard carrega em <500ms
+☐ Dados presentes (não vazio)
+☐ Network: 2 prefetch requests (megaStats + summary)
+
+TESTE 3: Reload
+☐ F5 (recarregar)
+☐ Dashboard carrega em <1s
+☐ Dados presentes (não vazio)
+☐ Network: 3 requests (me + megaStats + summary)
+
+TESTE 4: Console
+☐ Zero erros vermelhos
+☐ Zero warnings React
+
+TESTE 5: Múltiplos Logins
+☐ Logout → Login → Dashboard OK (3x)
+☐ Comportamento consistente
+
+RESULTADO:
+☐ PASS: Todos os testes OK
+☐ FAIL: <descrever problema>
+
+ROLLBACK (se necessário):
+☐ git checkout HEAD -- src/contexts/AuthContext.tsx
+☐ Verificar: npm run dev funciona
+```
+
+---
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- CORREÇÃO #7 - FIM -->
