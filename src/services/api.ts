@@ -7,13 +7,7 @@ export interface ApiResponse<T> {
     ok: boolean;
 }
 
-export interface ApiError {
-    message: string;
-    status: number;
-    detail?: string;
-}
-
-class ApiError extends Error {
+export class ApiError extends Error {
     status: number;
     detail?: string;
 
