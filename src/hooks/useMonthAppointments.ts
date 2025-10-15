@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { dayjs } from '@/lib/dayjs';
 import type { Appointment } from '@/types/appointment';
+import { CACHE_TIMES } from '@/constants/cache';
 
 const TZ = 'America/Recife';
 
@@ -36,7 +37,7 @@ export function useMonthAppointments(tenantId: string, year: number, month: numb
             });
             return data;
         },
-        staleTime: 30_000, // 30 segundos
+        staleTime: CACHE_TIMES.APPOINTMENTS,
         refetchOnWindowFocus: true,
     });
 }

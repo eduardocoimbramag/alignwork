@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/services/api'
 import { dayjs } from '@/lib/dayjs'
+import { CACHE_TIMES } from '@/constants/cache'
 
 const TZ = 'America/Recife'
 
@@ -20,7 +21,7 @@ export function useDashboardSummary(tenantId: string) {
             })
             return data
         },
-        staleTime: 30_000,
+        staleTime: CACHE_TIMES.APPOINTMENTS,
         refetchOnWindowFocus: true
     })
 }

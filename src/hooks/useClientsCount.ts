@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/services/api'
+import { CACHE_TIMES } from '@/constants/cache'
 
 type ClientsCountResponse = { count: number }
 
@@ -14,7 +15,7 @@ export function useClientsCount(tenantId?: string, status: 'active' | 'all' = 'a
             })
             return data
         },
-        staleTime: 30_000,
+        staleTime: CACHE_TIMES.APPOINTMENTS,
         refetchOnWindowFocus: true
     })
 }

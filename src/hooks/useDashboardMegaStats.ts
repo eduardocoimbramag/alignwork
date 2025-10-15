@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/services/api'
+import { CACHE_TIMES } from '@/constants/cache'
 
 export type BucketStats = { confirmed: number; pending: number }
 export type MegaStats = {
@@ -20,7 +21,7 @@ export function useDashboardMegaStats(tenantId: string, tz = 'America/Recife') {
             })
             return data
         },
-        staleTime: 30_000,
+        staleTime: CACHE_TIMES.APPOINTMENTS,
         refetchOnWindowFocus: true
     })
 }
