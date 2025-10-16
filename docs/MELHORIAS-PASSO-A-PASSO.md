@@ -12492,6 +12492,1124 @@ npm install
 
 ---
 
+### Correção #10 — Adicionar Transações em Operações Críticas (P0-010)
+
+> **Modo:** DOCUMENTAÇÃO SOMENTE (não aplicar agora)  
+> **Nível de Risco:** 🟡 BAIXO  
+> **Tempo Estimado:** 30-40 minutos  
+> **Prioridade:** P0 (Integridade de Dados Crítica)  
+> **Categoria:** Robustez / Transações / Error Handling  
+> **Princípio Violado:** ACID (Atomicity) / Error Recovery  
+> **Referência:** [MELHORIAS-E-CORRECOES.md#P0-010](./MELHORIAS-E-CORRECOES.md#p0-010-falta-transacoes-em-operacoes-criticas)
+
+---
+
+## 1. Contexto e Problema
+
+### Sintomas Observados
+
+**1. Dados Inconsistentes Após Erros**
+
+Quando ocorre um erro durante a criação de um appointment (ex: falha de validação, erro de banco de dados), o sistema pode deixar dados parcialmente salvos, criando inconsistências.
+
+**❌ PROBLEMA:** Transações sem rollback automático  
+**❌ PROBLEMA:** Locks de banco não liberados em caso de erro  
+**❌ PROBLEMA:** Estado inconsistente entre múltiplas operações
+
+**Exemplo de Erro Típico (Logs do Backend):**
+```
+ERROR: Exception in ASGI application
+Traceback (most recent call last):
+  File "backend/routes/appointments.py", line 159
+    db.commit()
+  sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: appointments.id
+```
+
+**Resultado:** Dados podem ficar em estado parcial, conexão do banco pode ficar travada.
+
+**2. Ausência de Tratamento de Exceções Estruturado**
+
+Verificando `backend/routes/appointments.py:150-171`:
+
+```python
+# Exemplo (não aplicar) — Estado ATUAL (sem transação)
+
+@router.post("/")
+def create_appointment(
+    appointment: AppointmentCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    
+    starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+    
+    db_appointment = Appointment(
+        tenant_id=appointment.tenantId,
+        patient_id=appointment.patientId,
+        starts_at=starts_at,
+        duration_min=appointment.durationMin,
+        status=appointment.status or "pending"
+    )
+    
+    db.add(db_appointment)
+    db.commit()  # ❌ Sem try-catch, sem rollback!
+    db.refresh(db_appointment)
+    
+    return db_appointment
+```
+
+**Problemas Específicos Identificados:**
+
+| Operação | Problema | Cenário de Falha | Comportamento Atual |
+|----------|----------|------------------|---------------------|
+| `db.add()` | Sem validação de integridade prévia | Constraint violation | ❌ Crash sem rollback |
+| `db.commit()` | Sem tratamento de erro | Deadlock, timeout | ❌ Conexão travada |
+| `db.refresh()` | Assume commit bem-sucedido | Commit falhou | ❌ Crash (objeto não existe) |
+| Múltiplos endpoints | Padrão duplicado | Manutenção difícil | ⚠️ Código duplicado |
+
+### Passos de Reprodução
+
+**Cenário 1: Violação de Constraint**
+
+1. Iniciar backend (`uvicorn main:app --reload`)
+2. Criar appointment válido (ID 1)
+3. Modificar código para forçar mesmo ID
+4. Tentar criar outro appointment
+5. **Resultado Atual:** HTTP 500, banco pode ficar inconsistente
+6. **Resultado Esperado:** HTTP 400 com rollback automático
+
+**Cenário 2: Timeout de Banco**
+
+1. Simular lentidão no banco (delay artificial)
+2. Criar appointment que excede timeout
+3. **Resultado Atual:** Timeout sem rollback, lock não liberado
+4. **Resultado Esperado:** HTTP 500 com rollback automático
+
+**Cenário 3: Validação Falha Após db.add()**
+
+1. Criar appointment com dados válidos no schema
+2. Adicionar validação personalizada que falha após `db.add()`
+3. **Resultado Atual:** Dados adicionados à sessão sem commit
+4. **Resultado Esperado:** Rollback automático, sessão limpa
+
+### Impacto
+
+**Impacto Técnico:**
+- ❌ **Integridade de dados:** Dados parciais podem ser persistidos
+- ❌ **Locks de banco:** Conexões travadas não são liberadas
+- ❌ **Debugging difícil:** Sem contexto claro sobre onde falhou
+
+**Impacto de Negócio:**
+- ❌ **Confiabilidade:** Sistema parece instável
+- ❌ **Recovery manual:** DBA precisa intervir para limpar dados
+- ❌ **UX ruim:** Erros genéricos 500 sem detalhes
+
+**Impacto de Manutenibilidade:**
+- ❌ **Código duplicado:** Padrão try-catch duplicado em múltiplos endpoints
+- ❌ **Inconsistência:** Alguns endpoints tratam erro, outros não
+- ❌ **Fragilidade:** Fácil esquecer rollback em novos endpoints
+
+---
+
+## 2. Mapa de Fluxo (Alto Nível)
+
+### Fluxo ATUAL (SEM Transações Adequadas)
+
+```
+Cliente                Backend                     Banco de Dados
+  │                      │                               │
+  │─POST /appointments──>│                               │
+  │                      │                               │
+  │                      │─ Valida schema (Pydantic)     │
+  │                      │                               │
+  │                      │─ Cria objeto Appointment      │
+  │                      │                               │
+  │                      │─ db.add(appointment) ────────>│
+  │                      │                               │ (sessão suja)
+  │                      │                               │
+  │                      │─ db.commit() ────────────────>│
+  │                      │                               │
+  │                      │                          ❌ ERRO!
+  │                      │                               │
+  │                      │                          (lock travado)
+  │                      │                               │
+  │                      │◄─── Exception ─────────────────│
+  │                      │                               │
+  │                      │ ❌ CRASH (sem rollback)       │
+  │                      │                               │
+  │◄─ HTTP 500 ─────────│                               │
+  │                      │                               │
+```
+
+**Problema:** Sem rollback, a sessão fica suja e o banco pode ficar com locks travados.
+
+### Fluxo PROPOSTO (COM Transações e Error Handling)
+
+```
+Cliente                Backend                     Banco de Dados
+  │                      │                               │
+  │─POST /appointments──>│                               │
+  │                      │                               │
+  │                      │─ Valida schema (Pydantic)     │
+  │                      │                               │
+  │                      │─ try:                         │
+  │                      │   Cria objeto Appointment     │
+  │                      │                               │
+  │                      │   db.add(appointment) ───────>│
+  │                      │                               │ (sessão suja)
+  │                      │                               │
+  │                      │   db.commit() ───────────────>│
+  │                      │                               │
+  │                      │                          ❌ ERRO!
+  │                      │                               │
+  │                      │◄─── Exception ─────────────────│
+  │                      │                               │
+  │                      │─ except ValueError as e:      │
+  │                      │   db.rollback() ─────────────>│
+  │                      │                               │
+  │                      │                          ✅ ROLLBACK
+  │                      │                          (limpa sessão)
+  │                      │                               │
+  │                      │   raise HTTPException(400)    │
+  │                      │                               │
+  │◄─ HTTP 400 ─────────│                               │
+  │   (mensagem clara)   │                               │
+```
+
+**Solução:** Try-catch estruturado com rollback automático garante consistência.
+
+---
+
+## 3. Hipóteses de Causa
+
+### Causa Raiz Confirmada
+
+**Causa:** Ausência de try-catch com rollback explícito nas rotas de CRUD
+
+**Evidência 1: Código-fonte** (`backend/routes/appointments.py:150-171`)
+```python
+# Exemplo (não aplicar) — Trecho problemático
+db.add(db_appointment)
+db.commit()  # ❌ Sem try-catch
+db.refresh(db_appointment)
+```
+→ Qualquer erro em `commit()` ou `refresh()` causa crash sem rollback
+
+**Evidência 2: SQLAlchemy Behavior**
+- SQLAlchemy **não faz rollback automático** em exceções
+- Sessão fica "suja" até rollback explícito
+- Locks de banco permanecem até conexão fechar
+
+**Evidência 3: Teste manual**
+- Forçar erro após `db.add()` → dados ficam na sessão
+- Forçar erro em `commit()` → lock não é liberado
+
+### Como Validar
+
+**Teste 1: Simular erro de constraint**
+```python
+# Exemplo (não aplicar) — Teste de constraint violation
+try:
+    # Criar appointment com ID duplicado (forçar erro)
+    appointment1 = create_appointment(...)  # OK
+    appointment2 = create_appointment(...)  # ID duplicado → erro
+except Exception as e:
+    # Verificar estado da sessão
+    print(db.dirty)  # ❌ ANTES: Sessão suja
+                     # ✅ DEPOIS: Sessão limpa (rollback)
+```
+
+**Teste 2: Verificar locks no banco**
+```bash
+# Exemplo (não aplicar) — Verificar locks (SQLite)
+sqlite3 alignwork.db "PRAGMA locking_mode;"
+
+# ❌ ANTES: Locks podem permanecer após erro
+# ✅ DEPOIS: Locks liberados (rollback + close)
+```
+
+---
+
+## 4. Objetivo (Resultado Verificável)
+
+### Critérios de Aceitação
+
+**Funcional:**
+1. ✅ Todas as operações de CRUD usam try-catch com rollback
+2. ✅ Erros retornam HTTP codes apropriados (400 para validação, 500 para server)
+3. ✅ Mensagens de erro são claras e específicas
+4. ✅ Sessão de banco é sempre limpa após erro
+5. ✅ Locks são liberados mesmo em caso de exceção
+
+**Técnico:**
+6. ✅ Código reutilizável (sem duplicação de try-catch)
+7. ✅ Logging adequado de erros
+8. ✅ Conformidade com princípios ACID
+
+**Validação:**
+9. ✅ Teste manual: Forçar erro → verificar rollback
+10. ✅ Teste manual: Verificar HTTP code correto
+11. ✅ Logs: Verificar mensagem de erro detalhada
+
+---
+
+## 5. Escopo (IN / OUT)
+
+### ✅ ESCOPO IN (O que SERÁ feito nesta correção)
+
+**Backend:**
+- ✅ Adicionar try-catch em `POST /appointments` (create)
+- ✅ Adicionar try-catch em `PATCH /appointments/{id}` (update)
+- ✅ Adicionar try-catch em `DELETE /appointments/{id}` (delete)
+- ✅ Rollback explícito em caso de erro
+- ✅ HTTPException com status codes apropriados:
+  - 400 para erros de validação (ValueError)
+  - 404 para resource not found
+  - 500 para erros internos (Exception genérica)
+- ✅ Logging de erros com contexto
+
+**Validação:**
+- ✅ Testar cenários de erro manualmente
+- ✅ Verificar que rollback acontece
+- ✅ Verificar que locks são liberados
+
+### ❌ ESCOPO OUT (O que NÃO será feito agora)
+
+**Fora do escopo desta correção:**
+- ❌ Context manager genérico (`db_transaction()`) → Fica para refactoring futuro
+- ❌ Testes automatizados (pytest) → Fica para MAINT-003
+- ❌ Logging estruturado (loguru) → Fica para MAINT-001
+- ❌ Validação de integridade referencial → Fica para P0-016
+- ❌ Retry automático em caso de deadlock → Fica para arquitetura futura
+- ❌ Transações distribuídas → Não aplicável (single DB)
+
+---
+
+## 6. Mudanças Propostas (Alto Nível)
+
+### Backend: Adicionar Error Handling com Rollback
+
+**Arquivo:** `backend/routes/appointments.py`
+
+**Mudança 1: POST /appointments (Create)**
+
+```python
+# Exemplo (não aplicar) — Adicionar try-catch com rollback
+
+@router.post("/", response_model=AppointmentResponse)
+def create_appointment(
+    appointment: AppointmentCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Conversão e validação
+        starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+        
+        # Criar appointment
+        db_appointment = Appointment(
+            tenant_id=appointment.tenantId,
+            patient_id=appointment.patientId,
+            starts_at=starts_at,
+            duration_min=appointment.durationMin,
+            status=appointment.status or "pending"
+        )
+        
+        # Operações de banco
+        db.add(db_appointment)
+        db.commit()
+        db.refresh(db_appointment)
+        
+        # Log de sucesso (opcional)
+        print(f"✅ Appointment created: {db_appointment.id}")
+        
+        return db_appointment
+        
+    except ValueError as e:
+        # Erro de validação/conversão
+        db.rollback()  # ✅ ROLLBACK
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid data: {str(e)}"
+        )
+    except Exception as e:
+        # Erro genérico (banco, integridade, etc)
+        db.rollback()  # ✅ ROLLBACK
+        print(f"❌ Failed to create appointment: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create appointment"
+        )
+```
+
+**Mudança 2: PATCH /appointments/{id} (Update)**
+
+```python
+# Exemplo (não aplicar) — Update com error handling
+
+@router.patch("/{appointment_id}", response_model=AppointmentResponse)
+def update_appointment(
+    appointment_id: int,
+    appointment_update: AppointmentUpdate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Buscar appointment
+        db_appointment = db.query(Appointment).filter(
+            Appointment.id == appointment_id
+        ).first()
+        
+        if not db_appointment:
+            raise HTTPException(status_code=404, detail="Appointment not found")
+        
+        # Atualizar
+        db_appointment.status = appointment_update.status
+        db.commit()
+        db.refresh(db_appointment)
+        
+        print(f"✅ Appointment updated: {appointment_id}")
+        return db_appointment
+        
+    except HTTPException:
+        # Re-raise HTTPException (404) sem alterar
+        db.rollback()  # ✅ ROLLBACK mesmo em 404
+        raise
+    except Exception as e:
+        # Erro de banco
+        db.rollback()  # ✅ ROLLBACK
+        print(f"❌ Failed to update appointment {appointment_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update appointment"
+        )
+```
+
+**Mudança 3: DELETE /appointments/{id} (Delete)**
+
+```python
+# Exemplo (não aplicar) — Delete com error handling
+
+@router.delete("/{appointment_id}", status_code=204)
+def delete_appointment(
+    appointment_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Buscar appointment
+        db_appointment = db.query(Appointment).filter(
+            Appointment.id == appointment_id
+        ).first()
+        
+        if not db_appointment:
+            raise HTTPException(status_code=404, detail="Appointment not found")
+        
+        # Deletar
+        db.delete(db_appointment)
+        db.commit()
+        
+        print(f"✅ Appointment deleted: {appointment_id}")
+        return Response(status_code=204)
+        
+    except HTTPException:
+        # Re-raise HTTPException (404)
+        db.rollback()  # ✅ ROLLBACK
+        raise
+    except Exception as e:
+        # Erro de banco
+        db.rollback()  # ✅ ROLLBACK
+        print(f"❌ Failed to delete appointment {appointment_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete appointment"
+        )
+```
+
+### Conformidade com Boas Práticas
+
+**✅ Princípios ACID:**
+- **Atomicity:** Rollback garante "tudo ou nada"
+- **Consistency:** Sessão sempre limpa após erro
+- **Isolation:** Locks liberados corretamente
+- **Durability:** Commit explícito apenas quando bem-sucedido
+
+**✅ Error Handling:**
+- Erros de validação → HTTP 400
+- Resource not found → HTTP 404
+- Erros de servidor → HTTP 500
+- Mensagens claras e específicas
+
+**✅ Logging:**
+- Sucesso: Log informativo
+- Erro: Log com contexto (ID, tipo de erro)
+
+---
+
+## 7. Alternativas Consideradas (Trade-offs)
+
+### Alternativa 1: Context Manager para Transações
+
+**Opção:**
+```python
+# Exemplo (não aplicar) — Context manager genérico
+@contextmanager
+def db_transaction(db: Session):
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+```
+
+**Prós:**
+- ✅ Reutilizável
+- ✅ DRY enforced
+- ✅ Menos código duplicado
+
+**Contras:**
+- ❌ Abstração adicional (complexidade)
+- ❌ Menos controle sobre erro específico
+- ❌ Mais difícil logar contexto específico
+
+**Decisão:** **NÃO usar agora** (fica para refactoring futuro após Nível 0)
+
+### Alternativa 2: Middleware de Transação
+
+**Opção:** Interceptar todas as requests e wrappear em transação
+
+**Prós:**
+- ✅ Automático (zero código por endpoint)
+- ✅ Consistente
+
+**Contras:**
+- ❌ Muito "mágico" (difícil debugar)
+- ❌ Pode afetar endpoints que não precisam de transação
+- ❌ Complexidade arquitetural
+
+**Decisão:** **NÃO usar** (overkill para escopo atual)
+
+### Alternativa 3: Try-Catch Inline (Escolha)
+
+**Opção:** Try-catch explícito em cada endpoint
+
+**Prós:**
+- ✅ Explícito e claro
+- ✅ Controle fino sobre cada erro
+- ✅ Fácil logar contexto específico
+- ✅ Simples de entender
+
+**Contras:**
+- ⚠️ Código duplicado (mitigado por padrão consistente)
+
+**Decisão:** ✅ **ESCOLHIDO** (melhor para Nível 0, refactoring depois)
+
+---
+
+## 8. Riscos e Mitigações
+
+### Risco 1: Esquecer Rollback em Novos Endpoints
+
+**Risco:** 🟡 MÉDIO  
+**Probabilidade:** Alta (sem enforcement automático)
+
+**Mitigação:**
+- ✅ Documentar padrão em CONTRIBUTING.md (futuro)
+- ✅ Code review checklist
+- ✅ Linter rule (futuro) para detectar `db.commit()` sem try-catch
+
+### Risco 2: Performance de Rollback
+
+**Risco:** 🟢 BAIXO  
+**Probabilidade:** Baixa
+
+**Impacto:** Rollback é operação rápida em SQLite/Postgres
+
+**Mitigação:**
+- ✅ Não aplicável (risco negligenciável)
+
+### Risco 3: Mensagens de Erro Expõem Informações Sensíveis
+
+**Risco:** 🟡 MÉDIO  
+**Probabilidade:** Média
+
+**Exemplo:**
+```python
+detail=f"Invalid data: {str(e)}"  # ⚠️ Pode expor stack trace
+```
+
+**Mitigação:**
+- ✅ Mensagens genéricas em produção
+- ✅ Detalhes apenas em logs (servidor)
+- ✅ Sanitizar mensagens de erro antes de retornar
+
+### Risco 4: Deadlock em Concorrência
+
+**Risco:** 🟢 BAIXO  
+**Probabilidade:** Baixa (SQLite tem bom gerenciamento)
+
+**Mitigação:**
+- ✅ Rollback libera locks automaticamente
+- ✅ Timeout de conexão (SQLite default)
+- ✅ Retry futuro (fora do escopo)
+
+---
+
+## 9. Casos de Teste (Manuais, Passo a Passo)
+
+### Teste 1: Create com Erro de Validação
+
+**Objetivo:** Verificar que erro de validação retorna HTTP 400 e faz rollback
+
+**Passos:**
+1. Iniciar backend: `uvicorn main:app --reload`
+2. Abrir Swagger: `http://localhost:8000/docs`
+3. POST `/api/v1/appointments/` com `startsAt` inválido:
+   ```json
+   {
+     "tenantId": "tenant-123",
+     "patientId": "patient-456",
+     "startsAt": "invalid-date",
+     "durationMin": 60
+   }
+   ```
+
+**Resultado Esperado:**
+- ✅ HTTP 400 (não 500)
+- ✅ Mensagem clara: `"Invalid data: ..."`
+- ✅ Log mostra rollback
+- ✅ Banco não tem appointment criado
+
+### Teste 2: Update com Resource Not Found
+
+**Objetivo:** Verificar que 404 retorna corretamente e faz rollback
+
+**Passos:**
+1. PATCH `/api/v1/appointments/99999` (ID inexistente)
+2. Body: `{"status": "confirmed"}`
+
+**Resultado Esperado:**
+- ✅ HTTP 404
+- ✅ Mensagem: `"Appointment not found"`
+- ✅ Rollback executado (sessão limpa)
+
+### Teste 3: Delete Bem-Sucedido
+
+**Objetivo:** Verificar que delete funciona normalmente
+
+**Passos:**
+1. Criar appointment válido (POST)
+2. Anotar ID retornado
+3. DELETE `/api/v1/appointments/{id}`
+
+**Resultado Esperado:**
+- ✅ HTTP 204 (No Content)
+- ✅ Appointment removido do banco
+- ✅ Log de sucesso
+
+### Teste 4: Erro de Banco (Simular)
+
+**Objetivo:** Verificar que erro de banco retorna HTTP 500 e faz rollback
+
+**Passos:**
+1. Modificar código temporariamente para forçar erro após `db.add()`:
+   ```python
+   db.add(db_appointment)
+   raise Exception("Simulated DB error")  # Forçar erro
+   ```
+2. Tentar criar appointment
+
+**Resultado Esperado:**
+- ✅ HTTP 500
+- ✅ Mensagem genérica: `"Failed to create appointment"`
+- ✅ Rollback executado
+- ✅ Log detalhado no servidor
+
+### Teste 5: Verificar Estado da Sessão
+
+**Objetivo:** Confirmar que sessão está limpa após erro
+
+**Passos:**
+1. Adicionar debug após rollback:
+   ```python
+   db.rollback()
+   print(f"Sessão suja? {len(db.dirty)}")  # Deve ser 0
+   print(f"Sessão nova? {len(db.new)}")    # Deve ser 0
+   ```
+2. Forçar erro e verificar logs
+
+**Resultado Esperado:**
+- ✅ `Sessão suja? 0`
+- ✅ `Sessão nova? 0`
+- ✅ Sessão completamente limpa
+
+---
+
+## 10. Checklist de Implementação (Para Depois)
+
+### Fase 1: Preparação (5 min)
+
+1. ☐ **Abrir arquivos:**
+   - `backend/routes/appointments.py`
+   - `docs/MELHORIAS-PASSO-A-PASSO.md` (esta documentação)
+
+2. ☐ **Verificar estado atual:**
+   - Backend compilando sem erros
+   - Git status limpo (commit anterior)
+
+3. ☐ **Backup (opcional mas recomendado):**
+   ```bash
+   git stash
+   git stash apply
+   ```
+
+### Fase 2: Implementar Create (10 min)
+
+4. ☐ **Localizar função `create_appointment()`:**
+   - Linha aproximada: 150-171
+
+5. ☐ **Adicionar try-catch:**
+   - Wrappear código existente em `try:`
+   - Adicionar `except ValueError as e:` com rollback + HTTP 400
+   - Adicionar `except Exception as e:` com rollback + HTTP 500
+
+6. ☐ **Adicionar logging (opcional):**
+   - Print de sucesso: `✅ Appointment created: {id}`
+   - Print de erro: `❌ Failed to create appointment: {error}`
+
+7. ☐ **Salvar arquivo**
+
+### Fase 3: Implementar Update (10 min)
+
+8. ☐ **Localizar função `update_appointment()`:**
+   - Linha aproximada: 173-195
+
+9. ☐ **Adicionar try-catch similar:**
+   - `except HTTPException:` → Re-raise (para 404)
+   - `except Exception:` → Rollback + HTTP 500
+
+10. ☐ **Salvar arquivo**
+
+### Fase 4: Implementar Delete (10 min)
+
+11. ☐ **Localizar função `delete_appointment()`:**
+    - Linha aproximada: 197-218
+
+12. ☐ **Adicionar try-catch similar:**
+    - `except HTTPException:` → Re-raise (para 404)
+    - `except Exception:` → Rollback + HTTP 500
+
+13. ☐ **Salvar arquivo**
+
+### Fase 5: Testar (15 min)
+
+14. ☐ **Iniciar backend:**
+    ```bash
+    cd backend
+    uvicorn main:app --reload
+    ```
+
+15. ☐ **Abrir Swagger UI:**
+    - `http://localhost:8000/docs`
+
+16. ☐ **Executar Teste 1:** Create com erro
+    - Verificar HTTP 400
+    - Verificar rollback nos logs
+
+17. ☐ **Executar Teste 2:** Update com 404
+    - Verificar HTTP 404
+
+18. ☐ **Executar Teste 3:** Delete bem-sucedido
+    - Verificar HTTP 204
+
+19. ☐ **Executar Teste 4:** Forçar erro de banco
+    - Verificar HTTP 500 e rollback
+
+20. ☐ **Verificar logs do servidor:**
+    - Mensagens de erro aparecem?
+    - Rollback executado?
+
+### Fase 6: Commit (5 min)
+
+21. ☐ **Verificar mudanças:**
+    ```bash
+    git diff backend/routes/appointments.py
+    ```
+
+22. ☐ **Adicionar ao stage:**
+    ```bash
+    git add backend/routes/appointments.py
+    ```
+
+23. ☐ **Commit:**
+    ```bash
+    git commit -m "feat: add transaction rollback in appointments CRUD (P0-010)
+
+- Add try-catch with rollback in POST /appointments
+- Add try-catch with rollback in PATCH /appointments/{id}
+- Add try-catch with rollback in DELETE /appointments/{id}
+- Return appropriate HTTP codes (400, 404, 500)
+- Add error logging for debugging
+- Ensure session cleanup after errors
+
+Fixes: Data inconsistency and locked connections on errors
+Tested: All CRUD operations with error scenarios"
+    ```
+
+### Fase 7: Validação Final (5 min)
+
+24. ☐ **Verificar commit:**
+    ```bash
+    git log --oneline -1
+    git show HEAD --stat
+    ```
+
+25. ☐ **Testar uma última vez:**
+    - Create válido → Deve funcionar
+    - Update com erro → Deve retornar erro apropriado
+
+26. ☐ **Celebrar! 🎉**
+    - ✅ Correção #10 completa
+    - ✅ Dados mais seguros
+    - ✅ Nível 0 COMPLETO (10/10 = 100%)!
+
+---
+
+## 11. Assunções e Pontos Ambíguos
+
+### Assunções Confirmadas
+
+1. ✅ **Arquivo existe:** `backend/routes/appointments.py` está presente (confirmado)
+2. ✅ **SQLAlchemy instalado:** FastAPI dependency (confirmado)
+3. ✅ **Sessão de banco:** Dependency `get_db()` fornece sessão válida (confirmado)
+4. ✅ **HTTPException disponível:** FastAPI built-in (confirmado)
+5. ✅ **Endpoints existentes:** POST, PATCH, DELETE já implementados (confirmado)
+
+### Pontos Ambíguos Pendentes
+
+#### 1. Logging Estruturado
+
+**Pergunta:** Usar print() ou logger?
+
+**Opções:**
+- A) `print()` (simples, disponível agora)
+- B) `logging.error()` (melhor, mas precisa configurar)
+- C) `loguru` (ideal, mas dependência extra)
+
+**Decisão:** **A) print()** ✅
+- **Justificativa:** Simples, funciona imediatamente
+- **Migração futura:** Substituir por loguru em MAINT-001
+
+#### 2. Mensagens de Erro em Produção
+
+**Pergunta:** Expor detalhes do erro ou mensagem genérica?
+
+**Opções:**
+- A) Sempre genérica: `"Internal server error"`
+- B) Específica em dev, genérica em prod
+- C) Sempre específica (atual)
+
+**Decisão:** **C) Sempre específica** ✅ (por enquanto)
+- **Justificativa:** Facilita debugging em desenvolvimento
+- **Mitigação:** Sanitizar em produção (futuro)
+
+#### 3. Tratamento de Constraint Violations
+
+**Pergunta:** Como tratar violações de integridade (UNIQUE, FOREIGN KEY)?
+
+**Situação:** SQLAlchemy lança `IntegrityError`
+
+**Opção Atual:**
+```python
+except Exception as e:  # Captura IntegrityError também
+    db.rollback()
+    raise HTTPException(500, "Failed to create appointment")
+```
+
+**Decisão:** **Manter atual** ✅
+- **Justificativa:** Funciona, é seguro
+- **Melhoria futura:** Capturar `IntegrityError` separadamente e retornar 409 (Conflict)
+
+---
+
+## 12. Apêndice: Exemplos (NÃO Aplicar)
+
+### Exemplo 1: Código Completo do POST /appointments
+
+```python
+# Exemplo (não aplicar) — POST /appointments COMPLETO com transação
+
+from fastapi import HTTPException, Response, Depends
+from sqlalchemy.orm import Session
+from datetime import datetime
+
+@router.post("/", response_model=AppointmentResponse)
+def create_appointment(
+    appointment: AppointmentCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new appointment.
+    
+    Returns:
+        201: Appointment created successfully
+        400: Invalid input data
+        500: Server error
+    """
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Validação e conversão
+        starts_at = datetime.fromisoformat(
+            appointment.startsAt.replace('Z', '+00:00')
+        )
+        
+        # Criar objeto
+        db_appointment = Appointment(
+            tenant_id=appointment.tenantId,
+            patient_id=appointment.patientId,
+            starts_at=starts_at,
+            duration_min=appointment.durationMin,
+            status=appointment.status or "pending"
+        )
+        
+        # Operações de banco (críticas)
+        db.add(db_appointment)
+        db.commit()
+        db.refresh(db_appointment)
+        
+        # Log de sucesso
+        print(f"✅ Appointment created: ID={db_appointment.id}, tenant={appointment.tenantId}")
+        
+        return db_appointment
+        
+    except ValueError as e:
+        # Erro de validação (ex: data inválida)
+        db.rollback()
+        print(f"❌ Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid data: {str(e)}"
+        )
+        
+    except Exception as e:
+        # Erro genérico (banco, constraint, etc)
+        db.rollback()
+        print(f"❌ Failed to create appointment: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create appointment. Please try again later."
+        )
+```
+
+### Exemplo 2: Código Completo do PATCH /appointments/{id}
+
+```python
+# Exemplo (não aplicar) — PATCH /appointments/{id} COMPLETO com transação
+
+@router.patch("/{appointment_id}", response_model=AppointmentResponse)
+def update_appointment(
+    appointment_id: int,
+    appointment_update: AppointmentUpdate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Update appointment status.
+    
+    Returns:
+        200: Appointment updated successfully
+        404: Appointment not found
+        500: Server error
+    """
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Buscar appointment
+        db_appointment = db.query(Appointment).filter(
+            Appointment.id == appointment_id
+        ).first()
+        
+        # Verificar se existe
+        if not db_appointment:
+            # Não precisa rollback aqui (nenhuma operação de escrita)
+            # Mas vamos fazer por consistência
+            db.rollback()
+            raise HTTPException(
+                status_code=404,
+                detail=f"Appointment {appointment_id} not found"
+            )
+        
+        # Atualizar
+        db_appointment.status = appointment_update.status
+        db.commit()
+        db.refresh(db_appointment)
+        
+        # Log de sucesso
+        print(f"✅ Appointment updated: ID={appointment_id}, new_status={appointment_update.status}")
+        
+        return db_appointment
+        
+    except HTTPException:
+        # Re-raise HTTPException (ex: 404 above)
+        # Rollback já foi feito acima
+        raise
+        
+    except Exception as e:
+        # Erro de banco
+        db.rollback()
+        print(f"❌ Failed to update appointment {appointment_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update appointment. Please try again later."
+        )
+```
+
+### Exemplo 3: Código Completo do DELETE /appointments/{id}
+
+```python
+# Exemplo (não aplicar) — DELETE /appointments/{id} COMPLETO com transação
+
+@router.delete("/{appointment_id}", status_code=204)
+def delete_appointment(
+    appointment_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete an appointment.
+    
+    Returns:
+        204: Appointment deleted successfully
+        404: Appointment not found
+        500: Server error
+    """
+    response.headers["Cache-Control"] = "no-store"
+    
+    try:
+        # Buscar appointment
+        db_appointment = db.query(Appointment).filter(
+            Appointment.id == appointment_id
+        ).first()
+        
+        # Verificar se existe
+        if not db_appointment:
+            db.rollback()
+            raise HTTPException(
+                status_code=404,
+                detail=f"Appointment {appointment_id} not found"
+            )
+        
+        # Deletar
+        db.delete(db_appointment)
+        db.commit()
+        
+        # Log de sucesso
+        print(f"✅ Appointment deleted: ID={appointment_id}")
+        
+        # HTTP 204 não retorna body
+        return Response(status_code=204)
+        
+    except HTTPException:
+        # Re-raise HTTPException (404)
+        raise
+        
+    except Exception as e:
+        # Erro de banco
+        db.rollback()
+        print(f"❌ Failed to delete appointment {appointment_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete appointment. Please try again later."
+        )
+```
+
+### Exemplo 4: Teste Manual com cURL
+
+```bash
+# Exemplo (não aplicar) — Testes com cURL
+
+# Teste 1: Create com sucesso
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "tenant-123",
+    "patientId": "patient-456",
+    "startsAt": "2025-12-01T14:30:00Z",
+    "durationMin": 60,
+    "status": "pending"
+  }'
+
+# ✅ Esperado: HTTP 200, appointment criado
+
+# Teste 2: Create com erro de validação
+curl -X POST http://localhost:8000/api/v1/appointments/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "tenant-123",
+    "patientId": "patient-456",
+    "startsAt": "invalid-date",
+    "durationMin": 60
+  }'
+
+# ✅ Esperado: HTTP 400, mensagem "Invalid data: ..."
+
+# Teste 3: Update com 404
+curl -X PATCH http://localhost:8000/api/v1/appointments/99999 \
+  -H "Content-Type: application/json" \
+  -d '{"status": "confirmed"}'
+
+# ✅ Esperado: HTTP 404, mensagem "Appointment 99999 not found"
+
+# Teste 4: Delete com sucesso
+curl -X DELETE http://localhost:8000/api/v1/appointments/1
+
+# ✅ Esperado: HTTP 204 (No Content)
+```
+
+### Exemplo 5: Verificar Estado da Sessão (Debug)
+
+```python
+# Exemplo (não aplicar) — Debug de sessão após rollback
+
+try:
+    # Operações de banco...
+    db.add(appointment)
+    db.commit()
+except Exception as e:
+    # Rollback
+    db.rollback()
+    
+    # Debug: Verificar estado da sessão
+    print(f"🔍 Debug da sessão:")
+    print(f"  - Objetos sujos (dirty): {len(db.dirty)}")      # Deve ser 0
+    print(f"  - Objetos novos (new): {len(db.new)}")         # Deve ser 0
+    print(f"  - Objetos deletados (deleted): {len(db.deleted)}") # Deve ser 0
+    print(f"  ✅ Sessão limpa: {len(db.dirty) == 0 and len(db.new) == 0}")
+    
+    # Re-raise erro
+    raise HTTPException(500, "Failed")
+```
+
+---
+
+**Tempo Total Estimado:** 30-40 minutos
+
+**Progresso Nível 0:** 10/10 (100%) 🎉
+
+**Próximo Passo:** Nível 0 COMPLETO! Partir para Nível 1 (Correções #11-25)
+
+---
+
 ## Glossário
 
 **Bare Except:** `except:` sem especificar exceção - captura tudo (má prática)
