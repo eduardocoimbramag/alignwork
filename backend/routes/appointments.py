@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -154,19 +154,37 @@ def create_appointment(
 ):
     response.headers["Cache-Control"] = "no-store"
     
-    starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
-    
-    db_appointment = Appointment(
-        tenant_id=appointment.tenantId,
-        patient_id=appointment.patientId,
-        starts_at=starts_at,
-        duration_min=appointment.durationMin,
-        status=appointment.status or "pending"
-    )
-    db.add(db_appointment)
-    db.commit()
-    db.refresh(db_appointment)
-    return db_appointment
+    try:
+        starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+        
+        db_appointment = Appointment(
+            tenant_id=appointment.tenantId,
+            patient_id=appointment.patientId,
+            starts_at=starts_at,
+            duration_min=appointment.durationMin,
+            status=appointment.status or "pending"
+        )
+        db.add(db_appointment)
+        db.commit()
+        db.refresh(db_appointment)
+        
+        print(f"✅ Appointment created: ID={db_appointment.id}, tenant={appointment.tenantId}")
+        return db_appointment
+        
+    except ValueError as e:
+        db.rollback()
+        print(f"❌ Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid data: {str(e)}"
+        )
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Failed to create appointment: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create appointment. Please try again later."
+        )
 
 @router.patch("/{appointment_id}", response_model=AppointmentResponse)
 def update_appointment_status(
@@ -177,13 +195,26 @@ def update_appointment_status(
 ):
     response.headers["Cache-Control"] = "no-store"
     
-    db_appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
-    if not db_appointment:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Appointment not found")
-    
-    db_appointment.status = appointment.status
-    db.commit()
-    db.refresh(db_appointment)
-    return db_appointment
+    try:
+        db_appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+        if not db_appointment:
+            db.rollback()
+            raise HTTPException(status_code=404, detail=f"Appointment {appointment_id} not found")
+        
+        db_appointment.status = appointment.status
+        db.commit()
+        db.refresh(db_appointment)
+        
+        print(f"✅ Appointment updated: ID={appointment_id}, new_status={appointment.status}")
+        return db_appointment
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Failed to update appointment {appointment_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update appointment. Please try again later."
+        )
 
