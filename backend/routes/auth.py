@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Request
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Optional
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from models.user import User
 from schemas.auth import UserRegister, UserLogin, Token, RefreshToken
@@ -18,9 +20,13 @@ from auth.dependencies import get_db, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+# Rate limiter instance
+limiter = Limiter(key_func=get_remote_address)
+
 @router.post("/register", response_model=Token)
-async def register(user_data: UserRegister, db: Session = Depends(get_db)):
-    """Register a new user."""
+@limiter.limit("3/hour")
+async def register(request: Request, user_data: UserRegister, db: Session = Depends(get_db)):
+    """Register a new user. Rate limit: 3 registrations per hour per IP."""
     existing_user = db.query(User).filter(
         (User.email == user_data.email) | (User.username == user_data.username)
     ).first()
@@ -63,8 +69,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=Token)
-async def login(user_credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
-    """Login user and return tokens."""
+@limiter.limit("5/minute")
+async def login(request: Request, user_credentials: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Login user and return tokens. Rate limit: 5 attempts per minute per IP."""
     print(f"Login attempt: {user_credentials.email}")
     
     user = db.query(User).filter(User.email == user_credentials.email).first()
