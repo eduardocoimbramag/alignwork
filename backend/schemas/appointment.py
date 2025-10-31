@@ -1,6 +1,6 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Generic, TypeVar
 
 class AppointmentCreate(BaseModel):
     tenantId: str
@@ -108,4 +108,52 @@ class AppointmentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============================================================================
+# PAGINAÇÃO - P1-001
+# ============================================================================
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """
+    Schema genérico para respostas paginadas.
+    
+    Attributes:
+        data: Lista de itens da página atual
+        total: Total de registros no banco (matching filters)
+        page: Número da página atual (1-indexed)
+        page_size: Quantidade de itens por página
+        total_pages: Total de páginas disponíveis
+    
+    Example:
+        {
+            "data": [...],
+            "total": 250,
+            "page": 1,
+            "page_size": 50,
+            "total_pages": 5
+        }
+    """
+    data: List[T]
+    total: int = Field(..., description="Total de registros")
+    page: int = Field(..., ge=1, description="Página atual (1-indexed)")
+    page_size: int = Field(..., ge=1, le=100, description="Itens por página")
+    total_pages: int = Field(..., ge=0, description="Total de páginas")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "data": [],
+                "total": 250,
+                "page": 1,
+                "page_size": 50,
+                "total_pages": 5
+            }
+        }
+
+class AppointmentPaginatedResponse(PaginatedResponse[AppointmentResponse]):
+    """Resposta paginada específica para Appointments."""
+    pass
 

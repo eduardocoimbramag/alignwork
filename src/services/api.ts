@@ -1,4 +1,12 @@
 // API client usando fetch nativo com suporte a cookies httpOnly
+import type { 
+    Appointment, 
+    AppointmentCreate, 
+    AppointmentUpdate,
+    AppointmentPaginatedResponse,
+    FetchAppointmentsParams 
+} from '@/types/appointment';
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export interface ApiResponse<T> {
@@ -123,4 +131,68 @@ api.patch = async function <T = any>(
         headers: options.headers,
     });
     return { data, status: 200, ok: true };
+};
+
+// ============================================================================
+// APPOINTMENTS API - P1-001
+// ============================================================================
+
+/**
+ * Busca appointments com paginação
+ */
+export const fetchAppointments = async (
+    params: FetchAppointmentsParams
+): Promise<AppointmentPaginatedResponse> => {
+    // Build query params
+    const queryParams: Record<string, string | number> = {
+        tenantId: params.tenantId,
+        page: params.page || 1,
+        page_size: params.page_size || 50,
+    };
+
+    if (params.from) {
+        queryParams.from = params.from;
+    }
+
+    if (params.to) {
+        queryParams.to = params.to;
+    }
+
+    // Fazer requisição
+    const { data } = await api.get<AppointmentPaginatedResponse>(
+        '/api/v1/appointments/',
+        { 
+            params: queryParams,
+            headers: { 'Cache-Control': 'no-cache' }
+        }
+    );
+
+    return data;
+};
+
+/**
+ * Cria um novo appointment
+ */
+export const createAppointment = async (
+    appointment: AppointmentCreate
+): Promise<Appointment> => {
+    const { data } = await api.post<Appointment>(
+        '/api/v1/appointments/',
+        appointment
+    );
+    return data;
+};
+
+/**
+ * Atualiza status de um appointment
+ */
+export const updateAppointmentStatus = async (
+    appointmentId: number,
+    update: AppointmentUpdate
+): Promise<Appointment> => {
+    const { data } = await api.patch<Appointment>(
+        `/api/v1/appointments/${appointmentId}`,
+        update
+    );
+    return data;
 };

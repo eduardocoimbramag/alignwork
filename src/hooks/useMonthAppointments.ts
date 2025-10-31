@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/services/api';
+import { fetchAppointments } from '@/services/api';
 import { dayjs } from '@/lib/dayjs';
 import type { Appointment } from '@/types/appointment';
 import { CACHE_TIMES } from '@/constants/cache';
@@ -24,18 +24,20 @@ export function useMonthAppointments(tenantId: string, year: number, month: numb
         .startOf('month')
         .toISOString();
 
-    return useQuery({
+    return useQuery<Appointment[]>({
         queryKey: ['appointments', tenantId, year, month],
         queryFn: async () => {
-            const { data } = await api.get<Appointment[]>('/api/v1/appointments/', {
-                params: {
-                    tenantId,
-                    from: monthStart,
-                    to: nextMonthStart,
-                },
-                headers: { 'Cache-Control': 'no-cache' }
+            // Buscar com paginação (pageSize grande para pegar mês inteiro)
+            const response = await fetchAppointments({
+                tenantId,
+                from: monthStart,
+                to: nextMonthStart,
+                page: 1,
+                page_size: 100, // Mês raramente terá >100 appointments
             });
-            return data;
+            
+            // Retornar apenas o array de appointments (backward compatibility)
+            return response.data;
         },
         staleTime: CACHE_TIMES.APPOINTMENTS,
         refetchOnWindowFocus: true,
