@@ -85,9 +85,7 @@ class AppointmentCreate(BaseModel):
         if not v_clean:
             raise ValueError('patientId cannot be empty or just whitespace')
         
-        if len(v_clean) < 3:
-            raise ValueError('patientId must be at least 3 characters long')
-        
+        # Permitir IDs numéricos curtos (1, 2, 3, etc) do banco de dados
         if len(v_clean) > 50:
             raise ValueError('patientId cannot exceed 50 characters')
         

@@ -164,9 +164,34 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       limparFormulario();
       onClose();
     } catch (error: any) {
+      console.error('Erro ao criar agendamento:', error);
+      
+      // Extrair mensagem de erro apropriada
+      let errorMessage = "Tente novamente em alguns instantes";
+      
+      // ApiError customizado (do nosso api.ts)
+      if (error?.detail) {
+        // Se for array de erros de validação do Pydantic
+        if (Array.isArray(error.detail)) {
+          errorMessage = error.detail
+            .map((err: any) => {
+              const field = err.loc?.join('.') || '';
+              const msg = err.msg || err.message || '';
+              return field ? `${field}: ${msg}` : msg;
+            })
+            .join('; ');
+        } else if (typeof error.detail === 'string') {
+          errorMessage = error.detail;
+        } else if (typeof error.detail === 'object') {
+          errorMessage = JSON.stringify(error.detail);
+        }
+      } else if (error?.message && error.message !== 'Erro na requisição') {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Erro ao agendar",
-        description: error?.message || "Tente novamente em alguns instantes",
+        description: errorMessage,
         variant: "destructive"
       });
     }

@@ -17,13 +17,19 @@ export interface ApiResponse<T> {
 
 export class ApiError extends Error {
     status: number;
-    detail?: string;
+    detail?: any; // Pode ser string ou objeto com erros de validação
+    response?: any; // Compatibilidade com código que espera response
 
-    constructor(message: string, status: number, detail?: string) {
+    constructor(message: string, status: number, detail?: any) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.detail = detail;
+        // Criar objeto response para compatibilidade
+        this.response = {
+            status,
+            data: { detail }
+        };
     }
 }
 
@@ -61,10 +67,12 @@ export async function api<T = any>(
         }
 
         if (!response.ok) {
+            // Capturar todo o objeto detail para preservar erros de validação
+            const detail = data?.detail || data?.message || 'Erro na requisição';
             throw new ApiError(
-                data?.detail || data?.message || 'Erro na requisição',
+                typeof detail === 'string' ? detail : JSON.stringify(detail),
                 response.status,
-                data?.detail
+                detail // Passar o detail completo (pode ser array ou string)
             );
         }
 

@@ -24,14 +24,35 @@ export function useCreateAppointment(tenantId: string) {
     return useMutation({
         mutationFn: async (payload: Omit<CreateInput, 'tenantId'>) => {
             const startsAtUTC = dayjs.tz(payload.startsAtLocal, 'America/Recife').utc().toISOString()
-            const body = { ...payload, tenantId, startsAt: startsAtUTC }
-            const { data } = await api.post('/api/v1/appointments', body, {
-                headers: { 'Cache-Control': 'no-cache' }
-            })
-            return data
+            
+            // Preparar body com campos esperados pelo backend (sem startsAtLocal)
+            const body = {
+                tenantId,
+                patientId: payload.patientId,
+                startsAt: startsAtUTC,
+                durationMin: payload.durationMin,
+                status: payload.status || 'pending'
+            }
+            
+            console.log('📤 Enviando para backend:', body)
+            
+            try {
+                const { data } = await api.post('/api/v1/appointments/', body, {
+                    headers: { 'Cache-Control': 'no-cache' }
+                })
+                console.log('✅ Resposta do backend:', data)
+                return data
+            } catch (error: any) {
+                console.error('❌ Erro do backend:', {
+                    status: error?.response?.status,
+                    data: error?.response?.data,
+                    message: error?.message
+                })
+                throw error
+            }
         },
         onSuccess: async (created: any) => {
-            invalidate(created?.startsAt) // UTC vindo do back
+            invalidate(created?.starts_at) // UTC vindo do back (snake_case)
             // Refetch imediato dos contadores (evita janelas de race)
             await qc.refetchQueries({ queryKey: ['dashboardMegaStats', tenantId] })
             await qc.refetchQueries({ queryKey: ['dashboardSummary', tenantId] })
