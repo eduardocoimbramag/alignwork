@@ -193,9 +193,18 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                       return (
                         <button
                           {...props}
+                          onClick={(e) => {
+                            // Chamar o onClick original do react-day-picker
+                            props.onClick?.(e);
+                            // Garantir que a data seja selecionada
+                            if (date) {
+                              setSelectedDate(date);
+                            }
+                          }}
                           className={cn(
                             "h-12 w-full p-0 font-normal relative rounded-md transition-all duration-200",
                             "flex items-center justify-start pl-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            "cursor-pointer",
                             selectedDate && isSameDay(date, selectedDate)
                               ? 'bg-gradient-to-br from-brand-purple/20 to-brand-pink/20 text-foreground hover:bg-gradient-to-br hover:from-brand-pink/20 hover:to-brand-purple/20'
                               : hasAppts
