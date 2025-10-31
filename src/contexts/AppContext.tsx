@@ -169,7 +169,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         // Transformar appointments da API para o formato do contexto
         const agendamentosCarregados = appointmentsResponse.data.map((appointment: Appointment) => {
-          const startsAtLocal = dayjs(appointment.starts_at).tz('America/Recife');
+              const startsAtLocal = dayjs.utc(appointment.starts_at).tz('America/Recife');
           const statusMap: Record<string, Agendamento['status']> = {
             'pending': 'pendente',
             'confirmed': 'confirmado',

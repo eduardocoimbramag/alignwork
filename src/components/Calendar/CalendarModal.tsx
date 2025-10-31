@@ -73,7 +73,7 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
     if (!appointments) return false;
     const dateStr = dayjs(date).format('YYYY-MM-DD');
     return appointments.some(apt =>
-      dayjs(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
+      dayjs.utc(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
     );
   };
 
@@ -82,7 +82,7 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
     if (!appointments) return { confirmed: 0, pending: 0 };
     const dateStr = dayjs(date).format('YYYY-MM-DD');
     const dayAppointments = appointments.filter(apt =>
-      dayjs(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
+      dayjs.utc(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
     );
 
     return {
@@ -97,10 +97,10 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
     const dateStr = dayjs(selectedDate).format('YYYY-MM-DD');
     return appointments
       .filter(apt =>
-        dayjs(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
+        dayjs.utc(apt.starts_at).tz('America/Recife').format('YYYY-MM-DD') === dateStr
       )
       .sort((a, b) =>
-        dayjs(a.starts_at).unix() - dayjs(b.starts_at).unix()
+        dayjs.utc(a.starts_at).unix() - dayjs.utc(b.starts_at).unix()
       );
   }, [appointments, selectedDate]);
 
@@ -274,7 +274,7 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-lg">
-                              {dayjs(appointment.starts_at).tz('America/Recife').format('HH:mm')}
+                              {dayjs.utc(appointment.starts_at).tz('America/Recife').format('HH:mm')}
                             </span>
                             <Badge
                               variant="secondary"

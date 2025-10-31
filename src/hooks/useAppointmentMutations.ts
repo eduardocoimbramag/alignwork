@@ -34,22 +34,10 @@ export function useCreateAppointment(tenantId: string) {
                 status: payload.status || 'pending'
             }
             
-            console.log('📤 Enviando para backend:', body)
-            
-            try {
-                const { data } = await api.post('/api/v1/appointments/', body, {
-                    headers: { 'Cache-Control': 'no-cache' }
-                })
-                console.log('✅ Resposta do backend:', data)
-                return data
-            } catch (error: any) {
-                console.error('❌ Erro do backend:', {
-                    status: error?.response?.status,
-                    data: error?.response?.data,
-                    message: error?.message
-                })
-                throw error
-            }
+            const { data } = await api.post('/api/v1/appointments/', body, {
+                headers: { 'Cache-Control': 'no-cache' }
+            })
+            return data
         },
         onSuccess: async (created: any) => {
             invalidate(created?.starts_at) // UTC vindo do back (snake_case)
