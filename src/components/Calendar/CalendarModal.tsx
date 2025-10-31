@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { useMonthAppointments } from "@/hooks/useMonthAppointments";
+import { useApp } from "@/contexts/AppContext";
 import { dayjs } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import type { Appointment } from "@/types/appointment";
@@ -45,6 +46,14 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
 
   // Buscar appointments do mês atual da API
   const { data: appointments, isLoading } = useMonthAppointments(tenantId, year, month);
+  
+  // Buscar clientes do contexto para exibir nomes
+  const { clientes } = useApp();
+  
+  // Criar mapa de clientes para lookup rápido (por ID do banco)
+  const clientesMap = useMemo(() => {
+    return new Map(clientes.map(c => [c.id, c]));
+  }, [clientes]);
 
   // Navegar para mês anterior
   const handlePreviousMonth = () => {
@@ -279,7 +288,10 @@ export const CalendarModal = ({ isOpen, onClose, tenantId = 'default-tenant' }: 
                           </div>
 
                           <h4 className="font-medium text-foreground">
-                            Paciente ID: {appointment.patient_id}
+                            {(() => {
+                              const cliente = clientesMap.get(appointment.patient_id);
+                              return cliente ? cliente.nome : `Paciente ID: ${appointment.patient_id}`;
+                            })()}
                           </h4>
                           <p className="text-sm text-muted-foreground">
                             Duração: {appointment.duration_min} minutos

@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from models.user import Base
-from routes import auth, appointments
+from routes import auth, appointments, patients
 from auth.dependencies import get_db
 
 # Load environment variables
@@ -61,6 +61,7 @@ app.dependency_overrides[get_db] = override_get_db
 # Include routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(appointments.router, prefix="/api")
+app.include_router(patients.router, prefix="/api")
 
 @app.get("/")
 async def root():

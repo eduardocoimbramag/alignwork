@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useApp } from "@/contexts/AppContext";
+import { useTenant } from "@/contexts/TenantContext";
+import { createPatient } from "@/services/api";
 
 /**
  * MODAL DE CADASTRO DE CLIENTE
@@ -46,7 +48,9 @@ const validarCPF = (cpf: string): boolean => {
 
 export const CadastroClienteModal = ({ isOpen, onClose }: CadastroClienteModalProps) => {
   const { adicionarCliente } = useApp();
+  const { tenantId } = useTenant();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
   // Estados para os campos do formulário
   const [formData, setFormData] = useState({
@@ -107,7 +111,7 @@ export const CadastroClienteModal = ({ isOpen, onClose }: CadastroClienteModalPr
   };
 
   // Função executada quando o usuário clica em "Salvar"
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validarFormulario()) {
@@ -119,8 +123,30 @@ export const CadastroClienteModal = ({ isOpen, onClose }: CadastroClienteModalPr
       return;
     }
 
+    setIsLoading(true);
     try {
-      adicionarCliente(formData);
+      // Salvar no backend
+      const createdPatient = await createPatient({
+        tenant_id: tenantId,
+        name: formData.nome,
+        cpf: formData.cpf,
+        phone: formData.telefone,
+        email: formData.email || undefined,
+        address: formData.endereco,
+        notes: formData.observacoes || undefined
+      });
+
+      // Atualizar contexto local com dados do backend
+      adicionarCliente({
+        id: createdPatient.id.toString(),
+        nome: createdPatient.name,
+        telefone: createdPatient.phone,
+        cpf: createdPatient.cpf,
+        endereco: createdPatient.address,
+        email: createdPatient.email || '',
+        observacoes: createdPatient.notes || '',
+        dataCadastro: new Date(createdPatient.created_at)
+      });
       
       toast({
         title: "Cliente cadastrado!",
@@ -129,12 +155,15 @@ export const CadastroClienteModal = ({ isOpen, onClose }: CadastroClienteModalPr
 
       limparFormulario();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Erro ao cadastrar cliente:', error);
       toast({
         title: "Erro ao cadastrar",
-        description: "Tente novamente em alguns instantes",
+        description: error?.detail || error?.message || "Tente novamente em alguns instantes",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -250,9 +279,10 @@ export const CadastroClienteModal = ({ isOpen, onClose }: CadastroClienteModalPr
             </Button>
             <Button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-brand-green to-brand-lime hover:from-brand-green/80 hover:to-brand-lime/80"
+              className="flex-1 bg-gradient-to-r from-brand-green to-brand-lime hover:from-brand-green/80 hover:to-brand-lime/80 disabled:opacity-50"
+              disabled={isLoading}
             >
-              Cadastrar Cliente
+              {isLoading ? "Cadastrando..." : "Cadastrar Cliente"}
             </Button>
           </div>
         </form>

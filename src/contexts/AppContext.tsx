@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { Appointment } from '@/types/appointment';
+import type { Patient } from '@/types/patient';
+import { dayjs } from '@/lib/dayjs';
 
 /**
  * CONTEXTO GLOBAL DA APLICAÇÃO
@@ -6,8 +9,10 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
  * Este arquivo gerencia todos os dados que precisam ser compartilhados
  * entre diferentes partes do sistema (clientes, agendamentos, etc.)
  * 
- * É como um "banco de dados temporário" que fica na memória
- * enquanto o usuário usa o sistema.
+ * Os dados são sincronizados com o backend na inicialização:
+ * - Clientes (patients) são carregados do banco de dados
+ * - Agendamentos (appointments) são carregados do banco de dados
+ * - Alterações são refletidas tanto no contexto local quanto no backend
  */
 
 // Tipos de dados que o sistema vai usar
@@ -92,9 +97,8 @@ interface AppContextType {
 // Criação do contexto
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Dados simulados para demonstração (será substituído por dados reais do Supabase)
+// Arrays iniciais vazios - serão populados com dados do backend na inicialização
 const clientesIniciais: Cliente[] = [];
-
 const agendamentosIniciais: Agendamento[] = [];
 
 // Configurações padrão
@@ -109,6 +113,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais);
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>(agendamentosIniciais);
   const [consultasAnotacoes, setConsultasAnotacoes] = useState<ConsultaAnotacao[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [settings, setSettings] = useState<UserSettings>(() => {
     // Hidratar configurações do localStorage na inicialização
     try {
@@ -122,13 +127,105 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return settingsIniciais;
   });
 
-  const adicionarCliente = (dadosCliente: Omit<Cliente, 'id' | 'dataCadastro'>) => {
-    const novoCliente: Cliente = {
-      ...dadosCliente,
-      id: Date.now().toString(), // ID simples para o MVP
-      dataCadastro: new Date()
+  // Carregar clientes e agendamentos do backend na inicialização
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Obter tenantId do localStorage
+        const tenantId = localStorage.getItem('alignwork:tenantId') || 'default-tenant';
+        
+        const { fetchAppointments, fetchPatients } = await import('@/services/api');
+        
+        // Carregar clientes e agendamentos em paralelo
+        const [patientsResponse, appointmentsResponse] = await Promise.all([
+          fetchPatients({
+            tenantId,
+            page: 1,
+            page_size: 100
+          }),
+          fetchAppointments({
+            tenantId,
+            from: dayjs().subtract(3, 'month').startOf('day').toISOString(),
+            to: dayjs().add(3, 'month').endOf('day').toISOString(),
+            page: 1,
+            page_size: 100
+          })
+        ]);
+        
+        // Transformar patients da API para o formato do contexto
+        const clientesCarregados: Cliente[] = patientsResponse.data.map((patient: Patient) => ({
+          id: patient.id.toString(),
+          nome: patient.name,
+          telefone: patient.phone,
+          cpf: patient.cpf,
+          endereco: patient.address,
+          email: patient.email || '',
+          observacoes: patient.notes || '',
+          dataCadastro: new Date(patient.created_at)
+        }));
+        
+        // Criar mapa de clientes para lookup rápido
+        const clientesMap = new Map(clientesCarregados.map(c => [c.id, c]));
+        
+        // Transformar appointments da API para o formato do contexto
+        const agendamentosCarregados = appointmentsResponse.data.map((appointment: Appointment) => {
+          const startsAtLocal = dayjs(appointment.starts_at).tz('America/Recife');
+          const statusMap: Record<string, Agendamento['status']> = {
+            'pending': 'pendente',
+            'confirmed': 'confirmado',
+            'cancelled': 'desmarcado'
+          };
+          
+          // Buscar nome do cliente no mapa
+          const cliente = clientesMap.get(appointment.patient_id);
+          
+          return {
+            id: appointment.id.toString(),
+            clienteId: appointment.patient_id,
+            cliente: cliente?.nome || appointment.patient_id,
+            tipo: 'Consulta' as const,
+            data: startsAtLocal.toDate(),
+            horaInicio: startsAtLocal.format('HH:mm'),
+            duracao: appointment.duration_min,
+            status: statusMap[appointment.status] || 'pendente'
+          };
+        });
+        
+        setClientes(clientesCarregados);
+        setAgendamentos(agendamentosCarregados);
+        console.log(`✅ ${clientesCarregados.length} clientes e ${agendamentosCarregados.length} agendamentos carregados do backend`);
+      } catch (error) {
+        console.warn('Erro ao carregar dados do backend:', error);
+        // Não exibir erro ao usuário - continua com array vazio
+      } finally {
+        setIsLoadingAppointments(false);
+      }
     };
-    setClientes(prev => [...prev, novoCliente]);
+
+    loadData();
+  }, []); // Executar apenas uma vez na montagem
+
+  const adicionarCliente = (dadosCliente: Omit<Cliente, 'id' | 'dataCadastro'> | Cliente) => {
+    // Se o cliente já tem ID e dataCadastro (vindo do backend), usar diretamente
+    // Caso contrário, criar ID temporário (edge case - não deveria acontecer em produção)
+    const novoCliente: Cliente = 'id' in dadosCliente && 'dataCadastro' in dadosCliente
+      ? dadosCliente
+      : {
+          ...dadosCliente,
+          id: Date.now().toString(), // Fallback temporário - clientes devem sempre vir do backend
+          dataCadastro: new Date()
+        };
+    
+    // Evitar duplicação: verificar se já existe um cliente com este ID
+    setClientes(prev => {
+      const jaExiste = prev.some(c => c.id === novoCliente.id);
+      if (jaExiste) {
+        // Atualizar o existente
+        return prev.map(c => c.id === novoCliente.id ? novoCliente : c);
+      }
+      // Adicionar novo
+      return [...prev, novoCliente];
+    });
   };
 
   const buscarClientes = (termo: string): Cliente[] => {
@@ -142,11 +239,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const adicionarAgendamento = (dadosAgendamento: Omit<Agendamento, 'id'> & { id?: string }) => {
+    // Agendamentos devem sempre ter ID do backend (gerado pelo banco de dados)
+    // O fallback Date.now() é apenas para casos edge de compatibilidade
     const novoAgendamento: Agendamento = {
       ...dadosAgendamento,
-      id: dadosAgendamento.id ?? Date.now().toString()
+      id: dadosAgendamento.id ?? Date.now().toString() // Fallback - agendamentos devem vir do backend
     };
-    setAgendamentos(prev => [...prev, novoAgendamento]);
+    
+    // Evitar duplicação: verificar se já existe um agendamento com este ID
+    setAgendamentos(prev => {
+      const jaExiste = prev.some(ag => ag.id === novoAgendamento.id);
+      if (jaExiste) {
+        // Atualizar o existente (útil para otimistic updates)
+        return prev.map(ag => ag.id === novoAgendamento.id ? novoAgendamento : ag);
+      }
+      // Adicionar novo
+      return [...prev, novoAgendamento];
+    });
   };
 
   const atualizarStatusAgendamento = (id: string, novoStatus: Agendamento['status']) => {

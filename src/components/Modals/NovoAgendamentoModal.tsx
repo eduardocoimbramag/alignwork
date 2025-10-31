@@ -135,15 +135,18 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       const dataLocal = dayjs(formData.data!).format('YYYY-MM-DD');
       const startsAtLocal = `${dataLocal} ${formData.horaInicio}`;
 
-      await createAppointment({
+      const createdAppointment = await createAppointment({
         patientId: formData.clienteId,
         startsAtLocal,
         durationMin: formData.duracao,
         status: 'pending'
       });
 
-      // Atualização local para refletir imediatamente na UI
+      // Atualização otimista local: refletir imediatamente na UI usando dados retornados do backend
+      // Isso melhora a UX eliminando delay visual, enquanto o contexto será sincronizado
+      // na próxima carga ou refetch automático
       adicionarAgendamento({
+        id: createdAppointment.id.toString(), // ID do banco de dados
         clienteId: formData.clienteId,
         cliente: formData.cliente,
         tipo: formData.tipo as any,

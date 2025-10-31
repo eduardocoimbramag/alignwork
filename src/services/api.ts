@@ -196,3 +196,66 @@ export const updateAppointmentStatus = async (
     );
     return data;
 };
+
+// ============================================================================
+// PATIENTS API
+// ============================================================================
+
+import type { Patient, PatientCreate, PatientPaginatedResponse, FetchPatientsParams } from '@/types/patient';
+
+/**
+ * Busca patients com paginação e busca
+ */
+export const fetchPatients = async (
+    params: FetchPatientsParams
+): Promise<PatientPaginatedResponse> => {
+    const queryParams: Record<string, string | number> = {
+        tenantId: params.tenantId,
+        page: params.page || 1,
+        page_size: params.page_size || 50,
+    };
+
+    if (params.search) {
+        queryParams.search = params.search;
+    }
+
+    const { data } = await api.get<PatientPaginatedResponse>(
+        '/api/v1/patients',
+        {
+            params: queryParams,
+            headers: { 'Cache-Control': 'no-cache' }
+        }
+    );
+
+    return data;
+};
+
+/**
+ * Cria um novo patient
+ */
+export const createPatient = async (
+    patient: PatientCreate
+): Promise<Patient> => {
+    const { data } = await api.post<Patient>(
+        '/api/v1/patients',
+        patient
+    );
+    return data;
+};
+
+/**
+ * Busca um patient específico
+ */
+export const getPatient = async (
+    patientId: number,
+    tenantId: string
+): Promise<Patient> => {
+    const { data } = await api.get<Patient>(
+        `/api/v1/patients/${patientId}`,
+        {
+            params: { tenantId },
+            headers: { 'Cache-Control': 'no-cache' }
+        }
+    );
+    return data;
+};
