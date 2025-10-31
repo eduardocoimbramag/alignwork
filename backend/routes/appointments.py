@@ -7,8 +7,34 @@ from auth.dependencies import get_db
 from models.appointment import Appointment
 from schemas.appointment import AppointmentCreate, AppointmentUpdate, AppointmentResponse, AppointmentPaginatedResponse
 from sqlalchemy import and_, func, case
+from cachetools import TTLCache
+import threading
 
 router = APIRouter(prefix="/v1/appointments", tags=["appointments"])
+
+# ============================================================================
+# CACHE - P1-003
+# ============================================================================
+
+# Cache em memória com TTL de 30 segundos
+# maxsize=100: Armazena até 100 cache keys diferentes
+# ttl=30: Cada entrada expira automaticamente após 30 segundos
+stats_cache = TTLCache(maxsize=100, ttl=30)
+
+# Lock para garantir thread-safety em acesso ao cache
+cache_lock = threading.Lock()
+
+def get_cache_key(tenant_id: str, tz: str) -> str:
+    """
+    Gera chave de cache única para mega_stats.
+    
+    Formato: mega_stats:{tenant_id}:{tz}:{date}
+    
+    Inclui data atual para invalidação automática ao trocar de dia.
+    """
+    now = datetime.now(ZoneInfo(tz))
+    date_key = now.strftime('%Y-%m-%d')
+    return f"mega_stats:{tenant_id}:{tz}:{date_key}"
 
 def _count_bucket(db: Session, tenant_id: str, start_local: datetime, end_local: datetime, TZ: ZoneInfo):
     """
@@ -194,7 +220,26 @@ def mega_stats(
     tz: str = Query("America/Recife"),
     db: Session = Depends(get_db),
 ):
+    """
+    Retorna estatísticas agregadas de appointments.
+    
+    Cache: TTL 30s (otimização P1-003)
+    - Cache HIT: < 1ms de resposta
+    - Cache MISS: ~100ms (calcula e salva no cache)
+    """
+    cache_key = get_cache_key(tenantId, tz)
+    
+    # Tentar buscar do cache (thread-safe)
+    with cache_lock:
+        cached = stats_cache.get(cache_key)
+        if cached is not None:
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Cache"] = "HIT"
+            return cached
+    
+    # Cache miss - calcular stats
     response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Cache"] = "MISS"
 
     TZ = ZoneInfo(tz)
     now_local = datetime.now(TZ)
@@ -232,6 +277,11 @@ def mega_stats(
         "month":     _count_bucket(db, tenantId, month_start, next_month_start, TZ),
         "nextMonth": _count_bucket(db, tenantId, next_month_start, after_next_month_start, TZ),
     }
+    
+    # Salvar no cache (thread-safe)
+    with cache_lock:
+        stats_cache[cache_key] = stats
+    
     return stats
 
 @router.post("/", response_model=AppointmentResponse)
