@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, UniqueConstraint
 from models.user import Base
 from datetime import datetime
 
@@ -16,7 +16,7 @@ class Patient(Base):
     
     # Informações pessoais
     name = Column(String, nullable=False)
-    cpf = Column(String, unique=True, nullable=False, index=True)
+    cpf = Column(String, nullable=False, index=True)  # Remover unique=True global
     phone = Column(String, nullable=False)
     email = Column(String, nullable=True)
     
@@ -29,4 +29,9 @@ class Patient(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Constraint composto: CPF único POR TENANT
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'cpf', name='uix_tenant_cpf'),
+    )
 

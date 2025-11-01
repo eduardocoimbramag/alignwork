@@ -1,10 +1,10 @@
 from pydantic import BaseModel, validator, Field
 from datetime import datetime
-from typing import Optional, List, Generic, TypeVar
+from typing import Optional, List, Generic, TypeVar, Union
 
 class AppointmentCreate(BaseModel):
     tenantId: str
-    patientId: str
+    patientId: Union[int, str]  # Aceita int ou string
     startsAt: str  # ISO string UTC
     durationMin: int
     status: Optional[str] = "pending"
@@ -76,20 +76,28 @@ class AppointmentCreate(BaseModel):
 
     @validator('patientId')
     def validate_patient_id(cls, v):
-        """Validate patientId format and content."""
-        if not v or not isinstance(v, str):
-            raise ValueError('patientId is required and must be a string')
+        """Valida e converte patientId para int."""
+        # Se já é int, valida e retorna
+        if isinstance(v, int):
+            if v <= 0:
+                raise ValueError('patientId must be a positive integer')
+            return v
         
-        # Remove whitespace and check length
-        v_clean = v.strip()
-        if not v_clean:
-            raise ValueError('patientId cannot be empty or just whitespace')
+        # Se é string, tenta converter
+        if isinstance(v, str):
+            v_clean = v.strip()
+            if not v_clean:
+                raise ValueError('patientId cannot be empty')
+            
+            try:
+                patient_id_int = int(v_clean)
+                if patient_id_int <= 0:
+                    raise ValueError('patientId must be a positive integer')
+                return patient_id_int
+            except ValueError:
+                raise ValueError(f'patientId must be a valid integer, got: {v_clean}')
         
-        # Permitir IDs numéricos curtos (1, 2, 3, etc) do banco de dados
-        if len(v_clean) > 50:
-            raise ValueError('patientId cannot exceed 50 characters')
-        
-        return v_clean
+        raise ValueError('patientId must be int or string')
 
 class AppointmentUpdate(BaseModel):
     status: str  # pending, confirmed, cancelled
@@ -97,7 +105,7 @@ class AppointmentUpdate(BaseModel):
 class AppointmentResponse(BaseModel):
     id: int
     tenant_id: str
-    patient_id: str
+    patient_id: int  # Correto: int agora (alinhado com o banco de dados)
     starts_at: datetime
     duration_min: int
     status: str

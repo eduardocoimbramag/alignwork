@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from typing import List, Optional
 from auth.dependencies import get_db
 from models.appointment import Appointment
+from models.patient import Patient
 from schemas.appointment import AppointmentCreate, AppointmentUpdate, AppointmentResponse, AppointmentPaginatedResponse
 from sqlalchemy import and_, func, case
 from cachetools import TTLCache
@@ -293,11 +294,23 @@ def create_appointment(
     response.headers["Cache-Control"] = "no-store"
     
     try:
+        # Verificar se paciente existe (Foreign Key validation)
+        patient = db.query(Patient).filter(
+            Patient.id == appointment.patientId,
+            Patient.tenant_id == appointment.tenantId
+        ).first()
+        
+        if not patient:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Patient with ID {appointment.patientId} not found for tenant {appointment.tenantId}"
+            )
+        
         starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
         
         db_appointment = Appointment(
             tenant_id=appointment.tenantId,
-            patient_id=appointment.patientId,
+            patient_id=appointment.patientId,  # Já é int (convertido pelo validador)
             starts_at=starts_at,
             duration_min=appointment.durationMin,
             status=appointment.status or "pending"
@@ -306,9 +319,11 @@ def create_appointment(
         db.commit()
         db.refresh(db_appointment)
         
-        print(f"✅ Appointment created: ID={db_appointment.id}, tenant={appointment.tenantId}")
+        print(f"✅ Appointment created: ID={db_appointment.id}, patient={patient.name}, tenant={appointment.tenantId}")
         return db_appointment
         
+    except HTTPException:
+        raise
     except ValueError as e:
         db.rollback()
         print(f"❌ Validation error: {str(e)}")

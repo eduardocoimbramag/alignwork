@@ -48,7 +48,14 @@ def create_patient(
         db.commit()
         db.refresh(db_patient)
         
-        print(f"✅ Patient created: ID={db_patient.id}, name={patient.name}, tenant={patient.tenant_id}")
+        # DEBUG: Verificar se o paciente foi realmente salvo
+        verify = db.query(Patient).filter(Patient.id == db_patient.id).first()
+        if verify:
+            print(f"✅ Patient created: ID={db_patient.id}, name={patient.name}, tenant={patient.tenant_id}")
+            print(f"✅ VERIFICATION: Patient ID={db_patient.id} confirmed in database")
+        else:
+            print(f"❌ WARNING: Patient ID={db_patient.id} NOT found after commit!")
+        
         return db_patient
         
     except Exception as e:

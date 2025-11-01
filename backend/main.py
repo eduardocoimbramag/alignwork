@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -16,9 +17,22 @@ from auth.dependencies import get_db
 load_dotenv()
 
 # Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///../alignwork.db")
+# Definir caminho absoluto para o banco na raiz do projeto
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATABASE_PATH = BASE_DIR / "alignwork.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DATABASE_PATH}")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+print(f"📦 Database location: {DATABASE_PATH}")
+print(f"📦 File exists: {DATABASE_PATH.exists()}")
+print(f"📦 File size: {DATABASE_PATH.stat().st_size if DATABASE_PATH.exists() else 0} bytes")
+
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30
+    }
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Create tables

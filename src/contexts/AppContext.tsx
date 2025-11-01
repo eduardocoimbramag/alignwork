@@ -176,13 +176,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             'cancelled': 'desmarcado'
           };
           
-          // Buscar nome do cliente no mapa
-          const cliente = clientesMap.get(appointment.patient_id);
+          // CORREÇÃO: Converter patient_id para string ao buscar no Map
+          const patientIdStr = appointment.patient_id.toString();
+          const cliente = clientesMap.get(patientIdStr);
           
           return {
             id: appointment.id.toString(),
-            clienteId: appointment.patient_id,
-            cliente: cliente?.nome || appointment.patient_id,
+            clienteId: patientIdStr,  // ← Usar string convertida
+            cliente: cliente?.nome || `Cliente #${appointment.patient_id}`,  // ← Fallback melhorado
             tipo: 'Consulta' as const,
             data: startsAtLocal.toDate(),
             horaInicio: startsAtLocal.format('HH:mm'),
@@ -193,6 +194,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         setClientes(clientesCarregados);
         setAgendamentos(agendamentosCarregados);
+        
+        // DEBUG: Verificar carregamento
+        console.log('🔍 DEBUG: Dados carregados do backend');
+        console.log(`   - Clientes: ${clientesCarregados.length}`);
+        console.log(`   - Agendamentos: ${agendamentosCarregados.length}`);
+        console.log('   - Clientes:', clientesCarregados);
+        console.log('   - Agendamentos:', agendamentosCarregados);
         console.log(`✅ ${clientesCarregados.length} clientes e ${agendamentosCarregados.length} agendamentos carregados do backend`);
       } catch (error) {
         console.warn('Erro ao carregar dados do backend:', error);
