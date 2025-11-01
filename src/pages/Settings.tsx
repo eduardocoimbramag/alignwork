@@ -6,198 +6,497 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Settings as SettingsIcon, ArrowLeft } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { 
+  User, 
+  Shield, 
+  Building, 
+  Settings as SettingsIcon, 
+  ArrowLeft,
+  Clock
+} from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 /**
- * PÁGINA DE CONFIGURAÇÕES
+ * PÁGINA DE CONFIGURAÇÕES - REFATORADA
  * 
- * Esta página permite ao usuário configurar suas preferências pessoais,
- * notificações e tema do sistema.
+ * Layout inspirado no Google Chrome Settings com sidebar de navegação.
+ * - Sidebar: 4 abas (Perfil, Permissões, Consultórios, Sistema)
+ * - Conteúdo: muda dinamicamente baseado na aba ativa
+ * - Responsivo: stack vertical em mobile, duas colunas em desktop
  */
 
+// Types
+type TabId = 'perfil' | 'permissoes' | 'consultorios' | 'sistema';
+type TimezoneValue = 'america-recife' | 'america-sao-paulo' | 'america-manaus';
+
+interface NavigationItem {
+  id: TabId;
+  label: string;
+  icon: typeof User;
+  description: string;
+}
+
 const Settings = () => {
-    const { settings, saveSettings } = useApp();
-    const { toast } = useToast();
+  // Estados de navegação
+  const [activeTab, setActiveTab] = useState<TabId>('sistema');
 
-    // Estados locais para os controles da página
-    const [notifications, setNotifications] = useState(settings.notificationsEnabled);
-    const [emailReminders, setEmailReminders] = useState(settings.emailReminders);
-    const [theme, setTheme] = useState(settings.theme);
-    const [isLoading, setIsLoading] = useState(false);
+  // Estados de configurações (sistema)
+  const { settings, saveSettings } = useApp();
+  const { toast } = useToast();
+  const [notifications, setNotifications] = useState(settings.notificationsEnabled);
+  const [emailReminders, setEmailReminders] = useState(settings.emailReminders);
+  const [theme, setTheme] = useState(settings.theme);
+  const [timezone, setTimezone] = useState<TimezoneValue>('america-recife');
+  const [isLoading, setIsLoading] = useState(false);
 
-    // Hidratar estados locais quando as configurações mudarem
-    useEffect(() => {
-        setNotifications(settings.notificationsEnabled);
-        setEmailReminders(settings.emailReminders);
-        setTheme(settings.theme);
-    }, [settings]);
+  // Hidratar estados locais quando as configurações mudarem
+  useEffect(() => {
+    setNotifications(settings.notificationsEnabled);
+    setEmailReminders(settings.emailReminders);
+    setTheme(settings.theme);
+  }, [settings]);
 
-    const handleSaveSettings = async () => {
-        setIsLoading(true);
+  // Itens de navegação
+  const navigationItems: NavigationItem[] = [
+    {
+      id: 'perfil',
+      label: 'Perfil',
+      icon: User,
+      description: 'Informações pessoais e dados de conta'
+    },
+    {
+      id: 'permissoes',
+      label: 'Permissões',
+      icon: Shield,
+      description: 'Controle de acesso e segurança'
+    },
+    {
+      id: 'consultorios',
+      label: 'Consultórios',
+      icon: Building,
+      description: 'Gerenciar locais de atendimento'
+    },
+    {
+      id: 'sistema',
+      label: 'Sistema',
+      icon: SettingsIcon,
+      description: 'Preferências gerais do sistema'
+    }
+  ];
 
-        try {
-            const newSettings = {
-                notificationsEnabled: notifications,
-                emailReminders: emailReminders,
-                theme: theme,
-                language: settings.language
-            };
+  // Handler: Mudança de aba
+  const handleTabChange = (tabId: TabId) => {
+    setActiveTab(tabId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-            // Salvar no contexto global e localStorage
-            saveSettings(newSettings);
+  // Handler: Salvar configurações
+  const handleSaveSettings = async () => {
+    setIsLoading(true);
 
-            // Simular delay para UX
-            await new Promise(resolve => setTimeout(resolve, 400));
+    try {
+      const newSettings = {
+        notificationsEnabled: notifications,
+        emailReminders: emailReminders,
+        theme: theme,
+        language: settings.language
+      };
 
-            // Exibir toast de sucesso
-            toast({
-                title: "Preferências salvas",
-                description: "Suas configurações foram salvas com sucesso.",
-            });
-        } catch (error) {
-            toast({
-                title: "Erro ao salvar",
-                description: "Ocorreu um erro ao salvar suas configurações.",
-                variant: "destructive",
-            });
-        } finally {
-            setIsLoading(false);
-        }
-    };
+      saveSettings(newSettings);
 
-    return (
-        // Background idêntico ao da página de Login (copiado de src/pages/Login.tsx linha 18)
-        <div className="min-h-screen flex items-center justify-center bg-[linear-gradient(135deg,var(--g-from-pastel)_0%,var(--g-mid-pastel)_48%,var(--g-to-pastel)_100%)] p-4">
-            <div className="w-full max-w-2xl space-y-6">
-                {/* Topbar com botão Voltar */}
-                <div className="flex justify-start">
-                    <Link
-                        to="/"
-                        className="text-black hover:text-white transition-colors duration-200 ease-out focus-visible:ring-2 focus-visible:ring-white/40 rounded-sm flex items-center gap-2"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                        Voltar
-                    </Link>
-                </div>
+      // TODO: Salvar timezone no backend
+      // await api.updateUserSettings({ timezone });
 
-                {/* Header da página */}
-                <div className="text-center space-y-2">
-                    <h1 className="text-4xl font-bold text-white">
-                        Configurações
-                    </h1>
-                    <p className="text-white/80">
-                        Personalize sua experiência no AlignWork
-                    </p>
-                </div>
+      await new Promise(resolve => setTimeout(resolve, 400));
 
-                {/* Card de Preferências */}
-                <Card className="rounded-2xl bg-white text-black border border-black/10 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.25)] p-6 md:p-8">
-                    <CardHeader>
-                        <CardTitle className="text-xl">Preferências</CardTitle>
-                        <CardDescription>
-                            Configure suas preferências de notificação
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                                <Label htmlFor="notifications" className="text-base">
-                                    Ativar notificações
-                                </Label>
-                                <p className="text-sm text-muted-foreground">
-                                    Receba notificações do sistema
-                                </p>
-                            </div>
-                            <Switch
-                                id="notifications"
-                                checked={notifications}
-                                onCheckedChange={setNotifications}
-                                aria-checked={notifications}
-                            />
-                        </div>
+      toast({
+        title: 'Preferências salvas',
+        description: 'Suas configurações foram salvas com sucesso.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Ocorreu um erro ao salvar suas configurações.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                                <Label htmlFor="email-reminders" className="text-base">
-                                    Receber lembretes por e-mail
-                                </Label>
-                                <p className="text-sm text-muted-foreground">
-                                    Receba lembretes importantes por e-mail
-                                </p>
-                            </div>
-                            <Switch
-                                id="email-reminders"
-                                checked={emailReminders}
-                                onCheckedChange={setEmailReminders}
-                                aria-checked={emailReminders}
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Card de Tema */}
-                <Card className="rounded-2xl bg-white text-black border border-black/10 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.25)] p-6 md:p-8">
-                    <CardHeader>
-                        <CardTitle className="text-xl">Tema</CardTitle>
-                        <CardDescription>
-                            Escolha o tema da interface
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <RadioGroup value={theme} onValueChange={setTheme} className="space-y-3">
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="system" id="system" />
-                                <Label htmlFor="system">Sistema</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="light" id="light" />
-                                <Label htmlFor="light">Claro</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="dark" id="dark" />
-                                <Label htmlFor="dark">Escuro</Label>
-                            </div>
-                        </RadioGroup>
-                    </CardContent>
-                </Card>
-
-                {/* Card de Idioma */}
-                <Card className="rounded-2xl bg-white text-black border border-black/10 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.25)] p-6 md:p-8">
-                    <CardHeader>
-                        <CardTitle className="text-xl">Idioma</CardTitle>
-                        <CardDescription>
-                            Selecione o idioma da interface
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Select disabled>
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Em breve" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="pt-br">Português (Brasil)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </CardContent>
-                </Card>
-
-                {/* Botão Salvar */}
-                <div className="flex justify-center">
-                    <Button
-                        onClick={handleSaveSettings}
-                        disabled={isLoading}
-                        aria-busy={isLoading}
-                        className="bg-[linear-gradient(90deg,var(--g-from)_0%,var(--g-to)_100%)] bg-[length:200%_100%] bg-[position:0%_0%] hover:bg-[position:100%_0%] transition-[background-position] duration-1000 ease-in-out text-white rounded-xl h-10 px-4 font-medium focus-visible:ring-4 focus-visible:ring-white/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <SettingsIcon className="w-4 h-4 mr-2" />
-                        {isLoading ? "Salvando..." : "Salvar alterações"}
-                    </Button>
-                </div>
-            </div>
+  return (
+    <div className="min-h-screen bg-[linear-gradient(135deg,var(--g-from-pastel)_0%,var(--g-mid-pastel)_48%,var(--g-to-pastel)_100%)] p-4 md:p-8">
+      <div className="w-full max-w-7xl mx-auto space-y-6">
+        {/* Botão Voltar */}
+        <div className="flex justify-start">
+          <Link
+            to="/"
+            className="text-black hover:text-white transition-colors duration-200 ease-out focus-visible:ring-2 focus-visible:ring-white/40 rounded-sm flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </Link>
         </div>
-    );
+
+        {/* Header Principal */}
+        <header className="text-center lg:text-left space-y-2 mb-8">
+          <h1 className="text-4xl font-bold text-white">
+            Configurações
+          </h1>
+          <p className="text-white/80">
+            Personalize sua experiência no AlignWork
+          </p>
+        </header>
+
+        {/* Container de Duas Colunas */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+          {/* Coluna 1: Sidebar de Navegação */}
+          <aside>
+            <Card className="rounded-2xl bg-white/80 backdrop-blur-sm border border-white/30 shadow-lg lg:sticky lg:top-4">
+              <CardContent className="p-2">
+                <nav className="space-y-1">
+                  {navigationItems.map((item) => (
+                    <Button
+                      key={item.id}
+                      variant={activeTab === item.id ? "secondary" : "ghost"}
+                      className={cn(
+                        "w-full justify-start text-left h-auto py-3 px-4 transition-all",
+                        activeTab === item.id && "bg-brand-purple/10 text-brand-purple font-semibold"
+                      )}
+                      onClick={() => handleTabChange(item.id)}
+                    >
+                      <item.icon className="w-5 h-5 mr-3 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{item.label}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {item.description}
+                        </div>
+                      </div>
+                    </Button>
+                  ))}
+                </nav>
+              </CardContent>
+            </Card>
+          </aside>
+
+          {/* Coluna 2: Área de Conteúdo */}
+          <main>
+            {activeTab === 'perfil' && <PerfilContent />}
+            {activeTab === 'permissoes' && <PermissoesContent />}
+            {activeTab === 'consultorios' && <ConsultoriosContent />}
+            {activeTab === 'sistema' && (
+              <SistemaContent
+                notifications={notifications}
+                setNotifications={setNotifications}
+                emailReminders={emailReminders}
+                setEmailReminders={setEmailReminders}
+                theme={theme}
+                setTheme={setTheme}
+                timezone={timezone}
+                setTimezone={setTimezone}
+                isLoading={isLoading}
+                handleSaveSettings={handleSaveSettings}
+              />
+            )}
+          </main>
+        </div>
+      </div>
+    </div>
+  );
 };
+
+// ============================================
+// COMPONENTE: Aba Sistema
+// ============================================
+interface SistemaContentProps {
+  notifications: boolean;
+  setNotifications: (value: boolean) => void;
+  emailReminders: boolean;
+  setEmailReminders: (value: boolean) => void;
+  theme: string;
+  setTheme: (value: string) => void;
+  timezone: TimezoneValue;
+  setTimezone: (value: TimezoneValue) => void;
+  isLoading: boolean;
+  handleSaveSettings: () => void;
+}
+
+const SistemaContent = ({
+  notifications,
+  setNotifications,
+  emailReminders,
+  setEmailReminders,
+  theme,
+  setTheme,
+  timezone,
+  setTimezone,
+  isLoading,
+  handleSaveSettings
+}: SistemaContentProps) => (
+  <div className="space-y-6">
+    {/* Header da Seção */}
+    <div>
+      <h2 className="text-2xl font-bold text-foreground">Sistema</h2>
+      <p className="text-muted-foreground">
+        Configure preferências gerais do sistema
+      </p>
+    </div>
+
+    {/* Card: Notificações */}
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardHeader>
+        <CardTitle>Notificações</CardTitle>
+        <CardDescription>
+          Gerencie como você recebe notificações
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Switch: Ativar notificações */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="notifications" className="text-base">
+              Ativar notificações
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Receba notificações do sistema
+            </p>
+          </div>
+          <Switch
+            id="notifications"
+            checked={notifications}
+            onCheckedChange={setNotifications}
+          />
+        </div>
+
+        <Separator />
+
+        {/* Switch: Email reminders */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="email-reminders" className="text-base">
+              Receber lembretes por e-mail
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Receba lembretes importantes por e-mail
+            </p>
+          </div>
+          <Switch
+            id="email-reminders"
+            checked={emailReminders}
+            onCheckedChange={setEmailReminders}
+          />
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* Card: Aparência */}
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardHeader>
+        <CardTitle>Aparência</CardTitle>
+        <CardDescription>
+          Personalize o tema da interface
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <Label>Tema</Label>
+          <RadioGroup value={theme} onValueChange={setTheme}>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="system" id="system" />
+              <Label htmlFor="system" className="font-normal cursor-pointer">
+                Sistema (detectar automaticamente)
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="light" id="light" />
+              <Label htmlFor="light" className="font-normal cursor-pointer">
+                Claro
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="dark" id="dark" />
+              <Label htmlFor="dark" className="font-normal cursor-pointer">
+                Escuro
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* Card: Região e Idioma */}
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardHeader>
+        <CardTitle>Região e Idioma</CardTitle>
+        <CardDescription>
+          Configure preferências regionais
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="timezone" className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Fuso Horário
+          </Label>
+          <Select value={timezone} onValueChange={(value) => setTimezone(value as TimezoneValue)}>
+            <SelectTrigger id="timezone">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="america-recife">
+                (GMT-3) Recife, Brasília
+              </SelectItem>
+              <SelectItem value="america-sao-paulo">
+                (GMT-3) São Paulo
+              </SelectItem>
+              <SelectItem value="america-manaus">
+                (GMT-4) Manaus
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="language">Idioma</Label>
+          <Select disabled defaultValue="pt-br">
+            <SelectTrigger id="language">
+              <SelectValue placeholder="Em breve" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pt-br">Português (Brasil)</SelectItem>
+              <SelectItem value="en-us">English (US)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Suporte para múltiplos idiomas em breve
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* Botão Salvar */}
+    <div className="flex justify-end">
+      <Button
+        onClick={handleSaveSettings}
+        disabled={isLoading}
+        className="bg-[linear-gradient(90deg,var(--g-from)_0%,var(--g-to)_100%)] hover:opacity-90 text-white px-6"
+      >
+        <SettingsIcon className="w-4 h-4 mr-2" />
+        {isLoading ? 'Salvando...' : 'Salvar alterações'}
+      </Button>
+    </div>
+  </div>
+);
+
+// ============================================
+// COMPONENTE: Aba Perfil (Placeholder)
+// ============================================
+const PerfilContent = () => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-2xl font-bold text-foreground">Perfil</h2>
+      <p className="text-muted-foreground">
+        Gerencie suas informações pessoais
+      </p>
+    </div>
+
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardContent className="py-12">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-purple/10">
+            <User className="w-8 h-8 text-brand-purple" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg">
+              Configurações de Perfil
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Esta seção estará disponível em breve.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Aqui você poderá editar suas informações pessoais, foto de perfil, 
+            dados de contato e preferências de conta.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+);
+
+// ============================================
+// COMPONENTE: Aba Permissões (Placeholder)
+// ============================================
+const PermissoesContent = () => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-2xl font-bold text-foreground">Permissões</h2>
+      <p className="text-muted-foreground">
+        Controle de acesso e segurança
+      </p>
+    </div>
+
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardContent className="py-12">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-purple/10">
+            <Shield className="w-8 h-8 text-brand-purple" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg">
+              Configurações de Permissões
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Esta seção estará disponível em breve.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Gerencie permissões de usuários, controle de acesso por função 
+            (admin, médico, recepcionista) e configurações de segurança.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+);
+
+// ============================================
+// COMPONENTE: Aba Consultórios (Placeholder)
+// ============================================
+const ConsultoriosContent = () => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-2xl font-bold text-foreground">Consultórios</h2>
+      <p className="text-muted-foreground">
+        Gerenciar locais de atendimento
+      </p>
+    </div>
+
+    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+      <CardContent className="py-12">
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-purple/10">
+            <Building className="w-8 h-8 text-brand-purple" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg">
+              Configurações de Consultórios
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Esta seção estará disponível em breve.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Configure múltiplos consultórios, endereços, horários de funcionamento 
+            e dados de contato de cada unidade.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+);
 
 export default Settings;
