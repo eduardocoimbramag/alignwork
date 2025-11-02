@@ -141,6 +141,30 @@ api.patch = async function <T = any>(
     return { data, status: 200, ok: true };
 };
 
+api.put = async function <T = any>(
+    path: string,
+    body: any,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    const data = await api<T>(path, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+        headers: options.headers,
+    });
+    return { data, status: 200, ok: true };
+};
+
+api.delete = async function <T = any>(
+    path: string,
+    options: { headers?: HeadersInit } = {}
+): Promise<ApiResponse<T>> {
+    const data = await api<T>(path, {
+        method: 'DELETE',
+        headers: options.headers,
+    });
+    return { data, status: 200, ok: true };
+};
+
 // ============================================================================
 // APPOINTMENTS API - P1-001
 // ============================================================================

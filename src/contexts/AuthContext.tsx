@@ -111,7 +111,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
             setIsLoading(true);
             const userData = await auth.register({
-                name: data.full_name || data.username,
+                name: data.full_name || data.email,
                 email: data.email,
                 password: data.password
             });

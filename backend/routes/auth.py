@@ -28,25 +28,22 @@ limiter = Limiter(key_func=get_remote_address)
 async def register(request: Request, user_data: UserRegister, db: Session = Depends(get_db)):
     """Register a new user. Rate limit: 3 registrations per hour per IP."""
     existing_user = db.query(User).filter(
-        (User.email == user_data.email) | (User.username == user_data.username)
+        User.email == user_data.email
     ).first()
     
     if existing_user:
-        if existing_user.email == user_data.email:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
     
     hashed_password = get_password_hash(user_data.password)
+    # TODO: Remover username após migração de banco de dados
+    # Usando email como username temporário até a coluna ser removida
+    temp_username = user_data.email.split('@')[0]  # Parte antes do @
     db_user = User(
         email=user_data.email,
-        username=user_data.username,
+        username=temp_username,  # Temporário - será removido após migração
         hashed_password=hashed_password,
         full_name=user_data.full_name
     )
@@ -204,7 +201,6 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "email": current_user.email,
-        "username": current_user.username,
         "full_name": current_user.full_name,
         "is_active": current_user.is_active,
         "is_verified": current_user.is_verified,

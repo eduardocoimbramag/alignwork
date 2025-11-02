@@ -7,7 +7,6 @@ export const auth = {
             method: 'POST',
             body: JSON.stringify({
                 email,
-                username: name,
                 password,
                 full_name: name
             })
@@ -33,7 +32,7 @@ export const auth = {
         // Converter User para UserPublic
         return {
             id: user.id.toString(),
-            name: user.full_name || user.username,
+            name: user.full_name || user.email,
             email: user.email
         };
     },

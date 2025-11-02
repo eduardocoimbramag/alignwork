@@ -4,17 +4,8 @@ import re
 
 class UserRegister(BaseModel):
     email: EmailStr
-    username: str
     password: str
     full_name: Optional[str] = None
-
-    @validator('username')
-    def validate_username(cls, v):
-        if len(v) < 3:
-            raise ValueError('Username must be at least 3 characters long')
-        if not re.match(r'^[a-zA-Z0-9_]+$', v):
-            raise ValueError('Username can only contain letters, numbers and underscores')
-        return v
 
     @validator('password')
     def validate_password(cls, v):

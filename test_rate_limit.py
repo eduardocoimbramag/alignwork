@@ -72,7 +72,6 @@ def test_register_rate_limit():
         
         test_user = {
             "email": f"testuser{i}_{int(time.time())}@example.com",
-            "username": f"testuser{i}_{int(time.time())}",
             "password": "TestPass123!",
             "full_name": f"Test User {i}"
         }

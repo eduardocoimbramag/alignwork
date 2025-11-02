@@ -53,7 +53,12 @@ const Header = () => {
         .toUpperCase()
         .slice(0, 2);
     }
-    return user?.username?.slice(0, 2).toUpperCase() || 'U';
+    // Usar iniciais do email se não houver full_name
+    if (user?.email) {
+      const emailPrefix = user.email.split('@')[0];
+      return emailPrefix.slice(0, 2).toUpperCase() || 'U';
+    }
+    return 'U';
   };
 
   return (
@@ -93,7 +98,7 @@ const Header = () => {
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">
-                    {user?.full_name || user?.username}
+                    {user?.full_name || user?.email}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground">
                     {user?.email}

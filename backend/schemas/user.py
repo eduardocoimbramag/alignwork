@@ -4,7 +4,6 @@ from datetime import datetime
 
 class UserBase(BaseModel):
     email: EmailStr
-    username: str
     full_name: Optional[str] = None
     is_active: bool = True
     is_verified: bool = False

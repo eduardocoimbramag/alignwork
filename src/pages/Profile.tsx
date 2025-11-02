@@ -42,7 +42,12 @@ const Profile = () => {
                 .toUpperCase()
                 .slice(0, 2);
         }
-        return user?.username?.slice(0, 2).toUpperCase() || 'U';
+        // Usar iniciais do email se não houver full_name
+        if (user?.email) {
+            const emailPrefix = user.email.split('@')[0];
+            return emailPrefix.slice(0, 2).toUpperCase() || 'U';
+        }
+        return 'U';
     };
 
     const handleSaveProfile = () => {
@@ -101,7 +106,7 @@ const Profile = () => {
 
                                 <div className="text-center md:text-left">
                                     <h3 className="text-xl font-semibold text-foreground">
-                                        {user?.full_name || user?.username}
+                                        {user?.full_name || user?.email}
                                     </h3>
                                     <p className="text-muted-foreground">
                                         {user?.email}

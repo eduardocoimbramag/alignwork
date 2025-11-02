@@ -10,7 +10,10 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    username = Column(String, unique=True, index=True, nullable=False)
+    # TODO: Remover username após migração de banco de dados
+    # A coluna ainda existe no banco - será removida via migração Alembic
+    # O campo não é mais usado no código (schemas/rotas já foram atualizados)
+    username = Column(String, unique=True, index=True, nullable=False)  # Deprecated - será removido
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)

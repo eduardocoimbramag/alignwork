@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Mail, Lock, User, UserCheck, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, UserCheck, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -12,9 +12,6 @@ import { useToast } from '../../hooks/use-toast';
 
 const registerSchema = z.object({
     email: z.string().email('Email inválido'),
-    username: z.string()
-        .min(3, 'Username deve ter pelo menos 3 caracteres')
-        .regex(/^[a-zA-Z0-9_]+$/, 'Username pode conter apenas letras, números e _'),
     password: z.string()
         .min(8, 'Senha deve ter pelo menos 8 caracteres')
         .regex(/[A-Z]/, 'Senha deve conter pelo menos uma letra maiúscula')
@@ -85,23 +82,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
                         </div>
                         {errors.email && (
                             <p className="text-sm text-destructive">{errors.email.message}</p>
-                        )}
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="username">Username</Label>
-                        <div className="relative">
-                            <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                id="username"
-                                type="text"
-                                placeholder="seu_username"
-                                className="pl-10"
-                                {...register('username')}
-                            />
-                        </div>
-                        {errors.username && (
-                            <p className="text-sm text-destructive">{errors.username.message}</p>
                         )}
                     </div>
 

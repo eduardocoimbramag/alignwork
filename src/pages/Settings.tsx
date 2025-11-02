@@ -18,6 +18,7 @@ import {
 import { useApp } from "@/contexts/AppContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ConsultoriosContent } from "@/components/Settings/Consultorios/ConsultoriosContent";
 
 /**
  * PÁGINA DE CONFIGURAÇÕES - REFATORADA
@@ -456,42 +457,6 @@ const PermissoesContent = () => (
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
             Gerencie permissões de usuários, controle de acesso por função 
             (admin, médico, recepcionista) e configurações de segurança.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-);
-
-// ============================================
-// COMPONENTE: Aba Consultórios (Placeholder)
-// ============================================
-const ConsultoriosContent = () => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold text-foreground">Consultórios</h2>
-      <p className="text-muted-foreground">
-        Gerenciar locais de atendimento
-      </p>
-    </div>
-
-    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
-      <CardContent className="py-12">
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-purple/10">
-            <Building className="w-8 h-8 text-brand-purple" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">
-              Configurações de Consultórios
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Esta seção estará disponível em breve.
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Configure múltiplos consultórios, endereços, horários de funcionamento 
-            e dados de contato de cada unidade.
           </p>
         </div>
       </CardContent>
