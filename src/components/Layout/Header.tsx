@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import MobileNav from "./MobileNav";
 
 /**
@@ -81,6 +82,9 @@ const Header = () => {
 
         {/* LADO DIREITO: Ações do usuário */}
         <div className="flex items-center space-x-2">
+          <div className="bg-white/20 backdrop-blur-sm rounded-full p-1">
+            <ThemeToggle variant="compact" />
+          </div>
           <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
             <Bell className="w-4 h-4" />
           </Button>

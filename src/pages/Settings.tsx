@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { 
@@ -16,6 +16,7 @@ import {
   Clock
 } from "lucide-react";
 import { useApp } from "@/contexts/AppContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ConsultoriosContent } from "@/components/Settings/Consultorios/ConsultoriosContent";
@@ -46,10 +47,10 @@ const Settings = () => {
 
   // Estados de configurações (sistema)
   const { settings, saveSettings } = useApp();
+  const { theme } = useTheme(); // Usar tema do ThemeProvider
   const { toast } = useToast();
   const [notifications, setNotifications] = useState(settings.notificationsEnabled);
   const [emailReminders, setEmailReminders] = useState(settings.emailReminders);
-  const [theme, setTheme] = useState(settings.theme);
   const [timezone, setTimezone] = useState<TimezoneValue>('america-recife');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -57,7 +58,6 @@ const Settings = () => {
   useEffect(() => {
     setNotifications(settings.notificationsEnabled);
     setEmailReminders(settings.emailReminders);
-    setTheme(settings.theme);
   }, [settings]);
 
   // Itens de navegação
@@ -102,7 +102,7 @@ const Settings = () => {
       const newSettings = {
         notificationsEnabled: notifications,
         emailReminders: emailReminders,
-        theme: theme,
+        theme: theme, // Sincronizar tema do ThemeProvider com AppContext
         language: settings.language
       };
 
@@ -190,13 +190,11 @@ const Settings = () => {
             {activeTab === 'consultorios' && <ConsultoriosContent />}
             {activeTab === 'sistema' && (
               <SistemaContent
-                notifications={notifications}
-                setNotifications={setNotifications}
-                emailReminders={emailReminders}
-                setEmailReminders={setEmailReminders}
-                theme={theme}
-                setTheme={setTheme}
-                timezone={timezone}
+        notifications={notifications}
+        setNotifications={setNotifications}
+        emailReminders={emailReminders}
+        setEmailReminders={setEmailReminders}
+        timezone={timezone}
                 setTimezone={setTimezone}
                 isLoading={isLoading}
                 handleSaveSettings={handleSaveSettings}
@@ -217,8 +215,6 @@ interface SistemaContentProps {
   setNotifications: (value: boolean) => void;
   emailReminders: boolean;
   setEmailReminders: (value: boolean) => void;
-  theme: string;
-  setTheme: (value: string) => void;
   timezone: TimezoneValue;
   setTimezone: (value: TimezoneValue) => void;
   isLoading: boolean;
@@ -230,13 +226,14 @@ const SistemaContent = ({
   setNotifications,
   emailReminders,
   setEmailReminders,
-  theme,
-  setTheme,
   timezone,
   setTimezone,
   isLoading,
   handleSaveSettings
-}: SistemaContentProps) => (
+}: SistemaContentProps) => {
+  const { theme } = useTheme();
+  
+  return (
   <div className="space-y-6">
     {/* Header da Seção */}
     <div>
@@ -302,29 +299,7 @@ const SistemaContent = ({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          <Label>Tema</Label>
-          <RadioGroup value={theme} onValueChange={setTheme}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="system" id="system" />
-              <Label htmlFor="system" className="font-normal cursor-pointer">
-                Sistema (detectar automaticamente)
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="light" id="light" />
-              <Label htmlFor="light" className="font-normal cursor-pointer">
-                Claro
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="dark" id="dark" />
-              <Label htmlFor="dark" className="font-normal cursor-pointer">
-                Escuro
-              </Label>
-            </div>
-          </RadioGroup>
-        </div>
+        <ThemeToggle variant="detailed" showIcons showLabel />
       </CardContent>
     </Card>
 
@@ -390,7 +365,8 @@ const SistemaContent = ({
       </Button>
     </div>
   </div>
-);
+  );
+};
 
 // ============================================
 // COMPONENTE: Aba Perfil (Placeholder)

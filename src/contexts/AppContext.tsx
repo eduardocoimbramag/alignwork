@@ -127,6 +127,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return settingsIniciais;
   });
 
+  // Sincronizar settings quando localStorage mudar (ex: quando ThemeProvider alterar o tema)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'alignwork:settings' && e.newValue) {
+        try {
+          const newSettings = JSON.parse(e.newValue);
+          setSettings(newSettings);
+        } catch (error) {
+          console.warn('Erro ao sincronizar configurações do localStorage:', error);
+        }
+      }
+    };
+
+    // Escutar mudanças no localStorage de outras abas/janelas
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Escutar eventos customizados quando o tema mudar na mesma janela
+    const handleThemeChange = () => {
+      try {
+        const savedSettings = localStorage.getItem('alignwork:settings');
+        if (savedSettings) {
+          const newSettings = JSON.parse(savedSettings);
+          setSettings(prevSettings => {
+            // Atualizar apenas o tema, mantendo outros valores
+            if (newSettings.theme !== prevSettings.theme) {
+              return { ...prevSettings, theme: newSettings.theme };
+            }
+            return prevSettings;
+          });
+        }
+      } catch (error) {
+        // Ignorar erros silenciosamente
+      }
+    };
+
+    // Escutar evento customizado 'theme-changed' disparado pelo ThemeProvider
+    window.addEventListener('theme-changed', handleThemeChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('theme-changed', handleThemeChange);
+    };
+  }, []);
+
   // Carregar clientes e agendamentos do backend na inicialização
   useEffect(() => {
     const loadData = async () => {

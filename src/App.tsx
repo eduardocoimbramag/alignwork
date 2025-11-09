@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider } from "@/contexts/AppContext";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
@@ -36,7 +37,8 @@ const App = () => (
     <QueryClientProvider client={queryClient}>
       <TenantProvider>
         <AuthProvider>
-          <AppProvider>
+          <ThemeProvider>
+            <AppProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -77,7 +79,8 @@ const App = () => (
                 </Routes>
               </BrowserRouter>
             </TooltipProvider>
-          </AppProvider>
+            </AppProvider>
+          </ThemeProvider>
         </AuthProvider>
       </TenantProvider>
     </QueryClientProvider>
