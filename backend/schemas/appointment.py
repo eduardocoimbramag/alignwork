@@ -8,6 +8,7 @@ class AppointmentCreate(BaseModel):
     startsAt: str  # ISO string UTC
     durationMin: int
     status: Optional[str] = "pending"
+    consultorioId: Optional[int] = None  # ID do consultório (obrigatório após migração)
 
     @validator('startsAt')
     def validate_starts_at(cls, v):
@@ -98,6 +99,14 @@ class AppointmentCreate(BaseModel):
                 raise ValueError(f'patientId must be a valid integer, got: {v_clean}')
         
         raise ValueError('patientId must be int or string')
+    
+    @validator('consultorioId')
+    def validate_consultorio_id(cls, v):
+        """Valida consultorioId se fornecido."""
+        if v is not None:
+            if not isinstance(v, int) or v <= 0:
+                raise ValueError('consultorioId must be a positive integer')
+        return v
 
 class AppointmentUpdate(BaseModel):
     status: str  # pending, confirmed, cancelled
@@ -106,6 +115,7 @@ class AppointmentResponse(BaseModel):
     id: int
     tenant_id: str
     patient_id: int  # Correto: int agora (alinhado com o banco de dados)
+    consultorio_id: Optional[int] = None  # ID do consultório
     starts_at: datetime
     duration_min: int
     status: str

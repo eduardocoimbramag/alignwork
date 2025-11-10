@@ -77,6 +77,52 @@ def list_consultorios(
     
     return consultorios
 
+@router.get("/light")
+def list_consultorios_light(
+    response: Response,
+    tenant_id: str = Query(..., alias="tenant_id", description="ID do tenant"),
+    db: Session = Depends(get_db),
+):
+    """
+    Lista consultórios em formato leve para select/combobox
+    
+    Retorna apenas id e label formatado (nome + endereço abreviado).
+    
+    - **tenant_id**: ID do tenant (obrigatório)
+    """
+    response.headers["Cache-Control"] = "no-store"
+    
+    consultorios = (
+        db.query(Consultorio)
+        .filter(Consultorio.tenant_id == tenant_id)
+        .order_by(Consultorio.nome)
+        .all()
+    )
+    
+    # Construir label: "<nome> – <rua> <número> – <bairro>"
+    result = []
+    for c in consultorios:
+        parts = [c.nome]
+        
+        # Adicionar endereço se disponível
+        if c.rua:
+            endereco_parts = [c.rua]
+            if c.numero:
+                endereco_parts.append(c.numero)
+            parts.append(" ".join(endereco_parts))
+        
+        if c.bairro:
+            parts.append(c.bairro)
+        
+        label = " – ".join(parts)
+        
+        result.append({
+            "id": c.id,
+            "label": label
+        })
+    
+    return result
+
 @router.get("/{consultorio_id}", response_model=ConsultorioResponse)
 def get_consultorio(
     consultorio_id: int,

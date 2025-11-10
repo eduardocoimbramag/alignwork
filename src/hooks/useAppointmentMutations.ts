@@ -9,6 +9,7 @@ type CreateInput = {
     startsAtLocal: string   // "YYYY-MM-DD HH:mm" no fuso local
     durationMin: number
     status?: 'pending' | 'confirmed'
+    consultorioId?: number  // ID do consultório (opcional por enquanto)
 }
 
 type UpdateStatusInput = {
@@ -31,7 +32,8 @@ export function useCreateAppointment(tenantId: string) {
                 patientId: payload.patientId,
                 startsAt: startsAtUTC,
                 durationMin: payload.durationMin,
-                status: payload.status || 'pending'
+                status: payload.status || 'pending',
+                ...(payload.consultorioId && { consultorioId: payload.consultorioId })
             }
             
             const { data } = await api.post('/api/v1/appointments/', body, {

@@ -15,6 +15,9 @@ import { ptBR } from "date-fns/locale";
 import { useTenant } from "@/contexts/TenantContext";
 import { useCreateAppointment } from "@/hooks/useAppointmentMutations";
 import { dayjs } from "@/lib/dayjs";
+import { useQuery } from "@tanstack/react-query";
+import { fetchConsultoriosLight, type ConsultorioLight } from "@/services/api";
+import { Building } from "lucide-react";
 
 /**
  * MODAL DE NOVO AGENDAMENTO
@@ -41,20 +44,38 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
     tipo: '' as 'Consulta' | 'Tratamento' | 'Retorno' | '',
     data: undefined as Date | undefined,
     horaInicio: '',
-    duracao: 60
+    duracao: 60,
+    consultorioId: null as number | null
   });
 
   // Estados para controle de interface
   const [buscarCliente, setBuscarCliente] = useState('');
   const [clienteSelecionado, setClienteSelecionado] = useState<string>('');
   const [openCombobox, setOpenCombobox] = useState(false);
+  const [openComboboxConsultorio, setOpenComboboxConsultorio] = useState(false);
+  const [buscarConsultorio, setBuscarConsultorio] = useState('');
   const [openCalendar, setOpenCalendar] = useState(false);
   const [erros, setErros] = useState<Record<string, string>>({});
+
+  // Query para buscar consultórios
+  const { data: consultorios = [], isLoading: isLoadingConsultorios } = useQuery({
+    queryKey: ['consultorios', 'light', tenantId],
+    queryFn: () => fetchConsultoriosLight(tenantId),
+    enabled: !!tenantId && isOpen,
+    staleTime: 5 * 60 * 1000, // 5 minutos de cache
+  });
 
   // Filtrar clientes baseado na busca
   const clientesFiltrados = useMemo(() => {
     return buscarClientes(buscarCliente);
   }, [buscarCliente, buscarClientes]);
+
+  // Filtrar consultórios baseado na busca
+  const consultoriosFiltrados = useMemo(() => {
+    if (!buscarConsultorio) return consultorios;
+    const termo = buscarConsultorio.toLowerCase();
+    return consultorios.filter(c => c.label.toLowerCase().includes(termo));
+  }, [buscarConsultorio, consultorios]);
 
   // Limpar formulário
   const limparFormulario = () => {
@@ -64,10 +85,12 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       tipo: '' as any,
       data: undefined,
       horaInicio: '',
-      duracao: 60
+      duracao: 60,
+      consultorioId: null
     });
     setBuscarCliente('');
     setClienteSelecionado('');
+    setBuscarConsultorio('');
     setErros({});
   };
 
@@ -99,6 +122,10 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
 
     if (formData.duracao < 15 || formData.duracao > 480) {
       novosErros.duracao = 'Duração deve ser entre 15 e 480 minutos';
+    }
+
+    if (!formData.consultorioId) {
+      novosErros.consultorio = 'Selecione um consultório';
     }
 
     setErros(novosErros);
@@ -139,7 +166,8 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
         patientId: formData.clienteId,
         startsAtLocal,
         durationMin: formData.duracao,
-        status: 'pending'
+        status: 'pending',
+        consultorioId: formData.consultorioId || undefined
       });
 
       // Atualização otimista local: refletir imediatamente na UI usando dados retornados do backend
@@ -260,6 +288,68 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
               </PopoverContent>
             </Popover>
             {erros.cliente && <p className="text-sm text-red-500">{erros.cliente}</p>}
+          </div>
+
+          {/* Seleção de Consultório */}
+          <div className="space-y-2">
+            <Label>Consultório *</Label>
+            <Popover open={openComboboxConsultorio} onOpenChange={setOpenComboboxConsultorio}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openComboboxConsultorio}
+                  className={`w-full justify-between ${erros.consultorio ? 'border-red-500' : ''}`}
+                  disabled={isLoadingConsultorios}
+                >
+                  {isLoadingConsultorios ? (
+                    "Carregando..."
+                  ) : formData.consultorioId ? (
+                    consultorios.find(c => c.id === formData.consultorioId)?.label || "Selecionar consultório…"
+                  ) : (
+                    "Selecionar consultório…"
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0">
+                <Command>
+                  <CommandInput
+                    placeholder="Buscar consultório..."
+                    value={buscarConsultorio}
+                    onValueChange={setBuscarConsultorio}
+                  />
+                  <CommandList>
+                    {consultorios.length === 0 && !isLoadingConsultorios ? (
+                      <CommandEmpty>
+                        Nenhum consultório encontrado. Cadastre um consultório em Configurações → Consultórios.
+                      </CommandEmpty>
+                    ) : (
+                      <CommandGroup>
+                        {consultoriosFiltrados.map((consultorio) => (
+                          <CommandItem
+                            key={consultorio.id}
+                            value={consultorio.label}
+                            onSelect={() => {
+                              setFormData(prev => ({ ...prev, consultorioId: consultorio.id }));
+                              setBuscarConsultorio('');
+                              setOpenComboboxConsultorio(false);
+                            }}
+                          >
+                            <Check
+                              className={`mr-2 h-4 w-4 ${formData.consultorioId === consultorio.id ? "opacity-100" : "opacity-0"}`}
+                            />
+                            <Building className="mr-2 h-4 w-4" />
+                            {consultorio.label}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {erros.consultorio && <p className="text-sm text-red-500">{erros.consultorio}</p>}
           </div>
 
           {/* Tipo de Consulta */}

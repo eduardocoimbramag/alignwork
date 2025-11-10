@@ -230,6 +230,31 @@ export const updateAppointmentStatus = async (
 };
 
 // ============================================================================
+// CONSULTORIOS API
+// ============================================================================
+
+export interface ConsultorioLight {
+    id: number;
+    label: string;
+}
+
+/**
+ * Busca consultórios em formato leve para select/combobox
+ */
+export const fetchConsultoriosLight = async (
+    tenantId: string
+): Promise<ConsultorioLight[]> => {
+    const { data } = await api.get<ConsultorioLight[]>(
+        '/api/v1/consultorios/light',
+        {
+            params: { tenant_id: tenantId },
+            headers: { 'Cache-Control': 'no-cache' }
+        }
+    );
+    return data;
+};
+
+// ============================================================================
 // PATIENTS API
 // ============================================================================
 
