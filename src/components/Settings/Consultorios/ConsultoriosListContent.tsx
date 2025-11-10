@@ -24,7 +24,7 @@ export const ConsultoriosListContent = ({ onCadastrar, onEditar }: ConsultoriosL
   const { data: consultorios, isLoading } = useQuery({
     queryKey: ['consultorios', tenantId],
     queryFn: async () => {
-      const response = await api.get(`/consultorios?tenant_id=${tenantId}`);
+      const response = await api.get(`/api/v1/consultorios?tenant_id=${tenantId}`);
       return response.data as Consultorio[];
     },
     enabled: !!tenantId,

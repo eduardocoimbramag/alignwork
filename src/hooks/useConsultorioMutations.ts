@@ -20,7 +20,7 @@ export function useConsultorioMutations() {
   // Mutation: Criar consultório
   const createMutation = useMutation({
     mutationFn: async (data: ConsultorioFormData) => {
-      const response = await api.post('/consultorios', {
+      const response = await api.post('/api/v1/consultorios', {
         ...data,
         tenant_id: tenantId
       });
@@ -47,7 +47,7 @@ export function useConsultorioMutations() {
   // Mutation: Atualizar consultório
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: ConsultorioFormData }) => {
-      const response = await api.put(`/consultorios/${id}`, data);
+      const response = await api.put(`/api/v1/consultorios/${id}?tenant_id=${tenantId}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -70,7 +70,7 @@ export function useConsultorioMutations() {
   // Mutation: Deletar consultório
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await api.delete(`/consultorios/${id}`);
+      const response = await api.delete(`/api/v1/consultorios/${id}?tenant_id=${tenantId}`);
       return response.data;
     },
     onSuccess: () => {
