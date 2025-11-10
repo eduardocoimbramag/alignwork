@@ -1,4 +1,4 @@
-import { Calendar, Bell, Settings, LogOut, User } from "lucide-react";
+import { Calendar, Bell, Settings, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -46,7 +46,28 @@ const Header = () => {
   };
 
   const getUserInitials = () => {
-    if (user?.full_name) {
+    if (!user) return "U";
+
+    // Prioridade 1: first_name + last_name
+    if (user.first_name && user.last_name) {
+      const first = user.first_name.charAt(0).toUpperCase();
+      const last = user.last_name.charAt(0).toUpperCase();
+      return first + last;
+    }
+
+    // Prioridade 2: apenas first_name
+    if (user.first_name) {
+      return user.first_name.charAt(0).toUpperCase();
+    }
+
+    // Prioridade 3: email (fallback)
+    if (user.email) {
+      const emailPrefix = user.email.split('@')[0];
+      return emailPrefix.slice(0, 2).toUpperCase() || 'U';
+    }
+
+    // Prioridade 4: full_name (deprecated, compatibilidade)
+    if (user.full_name) {
       return user.full_name
         .split(' ')
         .map(name => name[0])
@@ -54,11 +75,7 @@ const Header = () => {
         .toUpperCase()
         .slice(0, 2);
     }
-    // Usar iniciais do email se não houver full_name
-    if (user?.email) {
-      const emailPrefix = user.email.split('@')[0];
-      return emailPrefix.slice(0, 2).toUpperCase() || 'U';
-    }
+
     return 'U';
   };
 
@@ -102,7 +119,9 @@ const Header = () => {
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">
-                    {user?.full_name || user?.email}
+                    {user?.first_name && user?.last_name 
+                      ? `${user.first_name} ${user.last_name}`
+                      : user?.first_name || user?.full_name || user?.email}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground">
                     {user?.email}
@@ -110,12 +129,6 @@ const Header = () => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/perfil" className="flex items-center">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Perfil</span>
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/configuracoes" className="flex items-center">
                   <Settings className="mr-2 h-4 w-4" />

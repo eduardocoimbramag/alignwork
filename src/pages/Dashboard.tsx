@@ -11,6 +11,8 @@ import { HistoricoPacientesModal } from "@/components/Modals/HistoricoPacientesM
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/contexts/AppContext";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/hooks/useAuth";
+import { User } from "@/types/auth";
 
 /**
  * PÁGINA PRINCIPAL - DASHBOARD
@@ -34,6 +36,7 @@ const Dashboard = () => {
 
   const { clientes, buscarAgendamentosPorData, buscarProximosAgendamentos } = useApp();
   const { tenantId } = useTenant();
+  const { user } = useAuth();
 
   // Obter o dia da semana atual
   const hoje = new Date();
@@ -45,6 +48,26 @@ const Dashboard = () => {
   const numeroConsultas = consultasHoje.length;
   const proximasConsultas = buscarProximosAgendamentos();
 
+  // Função para obter mensagem de boas-vindas personalizada
+  const getGreetingMessage = (user: User | null): string => {
+    if (!user) {
+      return "Bom dia! 👋";
+    }
+
+    const firstName = user.first_name?.trim() || "";
+    const lastName = user.last_name?.trim() || "";
+
+    if (firstName && lastName) {
+      return `Dr. ${firstName} ${lastName}`;
+    }
+
+    if (firstName) {
+      return `Dr. ${firstName}`;
+    }
+
+    return "Bom dia! 👋";
+  };
+
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-brand-pink/30 via-background to-brand-lime/20">
@@ -55,7 +78,7 @@ const Dashboard = () => {
           {/* Seção de boas-vindas */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-foreground mb-2">
-              Bom dia! 👋
+              {getGreetingMessage(user)}
             </h2>
             <p className="text-muted-foreground">
               Que você tenha uma ótima {diaAtual}. Hoje temos {numeroConsultas} consultas agendadas!
