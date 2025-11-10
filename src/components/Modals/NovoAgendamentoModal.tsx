@@ -197,6 +197,7 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       
       // Extrair mensagem de erro apropriada
       let errorMessage = "Tente novamente em alguns instantes";
+      let errorTitle = "Erro ao agendar";
       
       // ApiError customizado (do nosso api.ts)
       if (error?.detail) {
@@ -211,15 +212,24 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
             .join('; ');
         } else if (typeof error.detail === 'string') {
           errorMessage = error.detail;
+          // Detectar se é erro de timezone/passado
+          if (errorMessage.includes('cannot be scheduled in the past')) {
+            errorTitle = "Horário inválido";
+            // A mensagem já contém horários recebidos e atuais do backend
+          }
         } else if (typeof error.detail === 'object') {
           errorMessage = JSON.stringify(error.detail);
         }
       } else if (error?.message && error.message !== 'Erro na requisição') {
         errorMessage = error.message;
+        // Detectar se é erro de timezone/passado
+        if (errorMessage.includes('cannot be scheduled in the past')) {
+          errorTitle = "Horário inválido";
+        }
       }
       
       toast({
-        title: "Erro ao agendar",
+        title: errorTitle,
         description: errorMessage,
         variant: "destructive"
       });

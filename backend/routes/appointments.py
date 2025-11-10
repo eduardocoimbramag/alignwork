@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import List, Optional
 from auth.dependencies import get_db
@@ -323,13 +323,20 @@ def create_appointment(
             
             consultorio_id = appointment.consultorioId
         
-        starts_at = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+        # Parse and normalize to UTC before saving
+        # The validator already checked format and business rules
+        starts_at_parsed = datetime.fromisoformat(appointment.startsAt.replace('Z', '+00:00'))
+        # Ensure it's in UTC (normalize if it came with offset)
+        starts_at_utc = starts_at_parsed.astimezone(timezone.utc)
+        
+        # Log for observability (without PII)
+        print(f"🔍 POST /api/v1/appointments - starts_at_original={appointment.startsAt}, starts_at_utc={starts_at_utc.isoformat()}Z, now_utc={datetime.now(timezone.utc).isoformat()}Z")
         
         db_appointment = Appointment(
             tenant_id=appointment.tenantId,
             patient_id=appointment.patientId,  # Já é int (convertido pelo validador)
             consultorio_id=consultorio_id,
-            starts_at=starts_at,
+            starts_at=starts_at_utc,  # Save in UTC
             duration_min=appointment.durationMin,
             status=appointment.status or "pending"
         )
