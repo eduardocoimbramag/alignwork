@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 
 from models.user import Base
 from models.consultorio import Consultorio  # Importar para criar a tabela
-from routes import auth, appointments, patients, consultorios
+from routes import auth, appointments, patients, consultorios, users
 from auth.dependencies import get_db
 
 # Load environment variables
@@ -117,6 +117,7 @@ app.dependency_overrides[get_db] = override_get_db
 
 # Include routers
 app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 app.include_router(appointments.router, prefix="/api")
 app.include_router(patients.router, prefix="/api")
 app.include_router(consultorios.router, prefix="/api")

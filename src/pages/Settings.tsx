@@ -20,6 +20,11 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ConsultoriosContent } from "@/components/Settings/Consultorios/ConsultoriosContent";
+import { ProfilePhotoUpload } from "@/components/Settings/ProfilePhotoUpload";
+import { ProfileFormContent } from "@/components/Settings/ProfileFormContent";
+import { getCurrentUser, updateUser, uploadProfilePhoto, deleteProfilePhoto } from "@/services/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { UserUpdatePayload } from "@/types/auth";
 
 /**
  * PÁGINA DE CONFIGURAÇÕES - REFATORADA
@@ -369,40 +374,280 @@ const SistemaContent = ({
 };
 
 // ============================================
-// COMPONENTE: Aba Perfil (Placeholder)
+// COMPONENTE: Aba Perfil
 // ============================================
-const PerfilContent = () => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold text-foreground">Perfil</h2>
-      <p className="text-muted-foreground">
-        Gerencie suas informações pessoais
-      </p>
-    </div>
+const PerfilContent = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Estados locais
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    first_name: "",
+    last_name: "",
+    email: "",
+    phone_personal: "",
+    phone_professional: "",
+    phone_clinic: ""
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
 
-    <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
-      <CardContent className="py-12">
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand-purple/10">
-            <User className="w-8 h-8 text-brand-purple" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-lg">
-              Configurações de Perfil
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Esta seção estará disponível em breve.
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Aqui você poderá editar suas informações pessoais, foto de perfil, 
-            dados de contato e preferências de conta.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-);
+  // Buscar dados do usuário
+  const { data: user } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: getCurrentUser,
+    staleTime: 5 * 60 * 1000 // 5 minutos
+  });
+
+  // Hidratar form quando usuário for carregado
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        first_name: user.first_name || "",
+        last_name: user.last_name || "",
+        email: user.email || "",
+        phone_personal: user.phone_personal || "",
+        phone_professional: user.phone_professional || "",
+        phone_clinic: user.phone_clinic || ""
+      });
+    }
+  }, [user]);
+
+  // Mutation para atualizar perfil
+  const updateProfileMutation = useMutation({
+    mutationFn: updateUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['current-user'] });
+    }
+  });
+
+  // Validar formulário
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.first_name || formData.first_name.trim().length < 2) {
+      newErrors.first_name = "Nome deve ter pelo menos 2 caracteres";
+    }
+
+    if (!formData.last_name || formData.last_name.trim().length < 2) {
+      newErrors.last_name = "Sobrenome deve ter pelo menos 2 caracteres";
+    }
+
+    if (!formData.email || !formData.email.includes("@")) {
+      newErrors.email = "Email inválido";
+    }
+
+    // Validar telefones (se preenchidos)
+    const validatePhone = (phone: string) => {
+      if (!phone) return true;
+      const numbers = phone.replace(/\D/g, '');
+      return numbers.length >= 10;
+    };
+
+    if (formData.phone_personal && !validatePhone(formData.phone_personal)) {
+      newErrors.phone_personal = "Telefone deve ter pelo menos 10 dígitos";
+    }
+
+    if (formData.phone_professional && !validatePhone(formData.phone_professional)) {
+      newErrors.phone_professional = "Telefone deve ter pelo menos 10 dígitos";
+    }
+
+    if (formData.phone_clinic && !validatePhone(formData.phone_clinic)) {
+      newErrors.phone_clinic = "Telefone deve ter pelo menos 10 dígitos";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Handler: Alterar campo do formulário
+  const handleFieldChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Limpar erro do campo
+    if (errors[field]) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
+
+  // Handler: Salvar alterações
+  const handleSave = async () => {
+    if (!validateForm()) {
+      toast({
+        title: "Erro de validação",
+        description: "Por favor, corrija os erros no formulário",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // 1. Upload de foto (se alterada)
+      if (photoFile) {
+        await uploadProfilePhoto(photoFile);
+        setPhotoFile(null);
+        setPhotoPreview(null);
+      }
+
+      // 2. Atualizar dados do perfil
+      const payload: UserUpdatePayload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        phone_personal: formData.phone_personal || undefined,
+        phone_professional: formData.phone_professional || undefined,
+        phone_clinic: formData.phone_clinic || undefined
+      };
+
+      await updateProfileMutation.mutateAsync(payload);
+
+      toast({
+        title: "Perfil atualizado!",
+        description: "Suas informações foram salvas com sucesso."
+      });
+    } catch (error: any) {
+      console.error("Erro ao salvar perfil:", error);
+      
+      let errorMessage = "Não foi possível salvar as alterações";
+      
+      if (error?.detail) {
+        errorMessage = typeof error.detail === 'string' 
+          ? error.detail 
+          : "Erro de validação. Verifique os campos";
+      }
+
+      toast({
+        title: "Erro ao salvar",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handler: Foto alterada
+  const handlePhotoChange = (file: File | null, preview: string | null) => {
+    setPhotoFile(file);
+    setPhotoPreview(preview);
+  };
+
+  // Handler: Remover foto
+  const handlePhotoRemove = async () => {
+    try {
+      if (user?.profile_photo_url) {
+        // Remover do servidor
+        await deleteProfilePhoto();
+        queryClient.invalidateQueries({ queryKey: ['current-user'] });
+        
+        toast({
+          title: "Foto removida",
+          description: "Sua foto de perfil foi removida com sucesso"
+        });
+      }
+      
+      // Limpar preview local
+      setPhotoFile(null);
+      setPhotoPreview(null);
+    } catch (error: any) {
+      console.error("Erro ao remover foto:", error);
+      
+      toast({
+        title: "Erro ao remover foto",
+        description: "Não foi possível remover a foto. Tente novamente.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Perfil</h2>
+        <p className="text-muted-foreground">
+          Gerencie suas informações pessoais
+        </p>
+      </div>
+
+      {/* Card: Foto de Perfil */}
+      <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+        <CardHeader>
+          <CardTitle>Foto de Perfil</CardTitle>
+          <CardDescription>
+            Adicione uma foto para personalizar seu perfil
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfilePhotoUpload
+            user={user || null}
+            photoFile={photoFile}
+            photoPreview={photoPreview}
+            onPhotoChange={handlePhotoChange}
+            onPhotoRemove={handlePhotoRemove}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Card: Dados do Perfil */}
+      <Card className="rounded-2xl bg-white border border-black/10 shadow-lg">
+        <CardHeader>
+          <CardTitle>Dados do Perfil</CardTitle>
+          <CardDescription>
+            Atualize suas informações pessoais e de contato
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileFormContent
+            formData={formData}
+            errors={errors}
+            onChange={handleFieldChange}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Botão Salvar */}
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            // Resetar para valores do usuário
+            if (user) {
+              setFormData({
+                first_name: user.first_name || "",
+                last_name: user.last_name || "",
+                email: user.email || "",
+                phone_personal: user.phone_personal || "",
+                phone_professional: user.phone_professional || "",
+                phone_clinic: user.phone_clinic || ""
+              });
+            }
+            setPhotoFile(null);
+            setPhotoPreview(null);
+            setErrors({});
+          }}
+          disabled={isLoading}
+        >
+          Cancelar
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={isLoading}
+          className="bg-[linear-gradient(90deg,var(--g-from)_0%,var(--g-to)_100%)] hover:opacity-90 text-white px-6"
+        >
+          {isLoading ? 'Salvando...' : 'Salvar alterações'}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 // ============================================
 // COMPONENTE: Aba Permissões (Placeholder)

@@ -316,3 +316,73 @@ export const getPatient = async (
     );
     return data;
 };
+
+// ============================================
+// USER PROFILE API
+// ============================================
+
+import { User, UserUpdatePayload } from '@/types/auth';
+
+/**
+ * Busca o perfil do usuário logado
+ */
+export const getCurrentUser = async (): Promise<User> => {
+    const data = await api<User>('/api/v1/users/me', {
+        method: 'GET',
+        headers: { 'Cache-Control': 'no-cache' }
+    });
+    return data;
+};
+
+/**
+ * Atualiza o perfil do usuário logado
+ */
+export const updateUser = async (payload: UserUpdatePayload): Promise<User> => {
+    const data = await api<User>('/api/v1/users/me', {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+        },
+        body: JSON.stringify(payload)
+    });
+    return data;
+};
+
+/**
+ * Faz upload de foto de perfil
+ */
+export const uploadProfilePhoto = async (file: File): Promise<{ profile_photo_url: string; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const url = `${API_URL}/api/v1/users/me/profile-photo`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new ApiError(
+            errorData.detail || 'Failed to upload photo',
+            response.status,
+            errorData.detail
+        );
+    }
+    
+    return response.json();
+};
+
+/**
+ * Remove a foto de perfil do usuário
+ */
+export const deleteProfilePhoto = async (): Promise<{ message: string }> => {
+    const data = await api<{ message: string }>('/api/v1/users/me/profile-photo', {
+        method: 'DELETE',
+        headers: { 'Cache-Control': 'no-cache' }
+    });
+    return data;
+};

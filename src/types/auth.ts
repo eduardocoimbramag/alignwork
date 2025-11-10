@@ -1,11 +1,27 @@
 export interface User {
     id: number;
     email: string;
-    full_name?: string;
+    first_name: string;
+    last_name: string;
+    full_name?: string;  // Deprecated - manter para compatibilidade
+    profile_photo_url?: string | null;
+    phone_personal?: string | null;
+    phone_professional?: string | null;
+    phone_clinic?: string | null;
     is_active: boolean;
     is_verified: boolean;
     created_at: string;
     updated_at?: string;
+}
+
+export interface UserUpdatePayload {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    phone_personal?: string;
+    phone_professional?: string;
+    phone_clinic?: string;
+    profile_photo_url?: string;
 }
 
 export interface UserPublic {

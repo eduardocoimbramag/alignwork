@@ -14,7 +14,6 @@ import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
 
 /**
  * COMPONENTE PRINCIPAL DO ALIGNWORK
@@ -62,11 +61,6 @@ const App = () => (
                   <Route path="/configuracoes" element={
                     <ProtectedRoute>
                       <Settings />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/perfil" element={
-                    <ProtectedRoute>
-                      <Profile />
                     </ProtectedRoute>
                   } />
 
