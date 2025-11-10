@@ -1,6 +1,7 @@
 from pydantic import BaseModel, validator, Field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Generic, TypeVar, Union
+import os
 
 class AppointmentCreate(BaseModel):
     tenantId: str
@@ -31,21 +32,13 @@ class AppointmentCreate(BaseModel):
         # Normalize to UTC before comparison
         starts_at_utc = dt.astimezone(timezone.utc)
         
-        # Business rule: Cannot schedule in the past
-        # Always compare in UTC, regardless of input timezone
-        now_utc = datetime.now(timezone.utc)
-        if starts_at_utc < now_utc:
-            raise ValueError(
-                f'Appointment cannot be scheduled in the past. '
-                f'Received: {starts_at_utc.isoformat()}Z, '
-                f'Current: {now_utc.isoformat()}Z'
-            )
-        
         # Business rule: Cannot schedule too far in the future (max 2 years)
+        now_utc = datetime.now(timezone.utc)
         max_future_utc = now_utc.replace(year=now_utc.year + 2)
         if starts_at_utc > max_future_utc:
             raise ValueError('Appointment cannot be scheduled more than 2 years in the future')
         
+        # Note: Validation for "past" is done in the route handler to allow structured error response
         # Return the original string (will be normalized to UTC in the route handler)
         return v
 

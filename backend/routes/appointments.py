@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import List, Optional
+import os
 from auth.dependencies import get_db
 from models.appointment import Appointment
 from models.patient import Patient
@@ -329,8 +330,52 @@ def create_appointment(
         # Ensure it's in UTC (normalize if it came with offset)
         starts_at_utc = starts_at_parsed.astimezone(timezone.utc)
         
+        # Get grace period from environment (default: 0 minutes)
+        grace_period_minutes = int(os.getenv('APPOINTMENT_MIN_LEAD_TIME_MINUTES', '0'))
+        grace_period = timedelta(minutes=grace_period_minutes)
+        
+        # Business rule: Cannot schedule in the past (considering grace period)
+        now_utc = datetime.now(timezone.utc)
+        min_allowed_utc = now_utc - grace_period
+        
+        if starts_at_utc < min_allowed_utc:
+            # Calculate suggested next slot (round up to next 15-minute interval)
+            suggested_next_utc = now_utc + grace_period
+            # Round up to next 15-minute mark
+            minutes = suggested_next_utc.minute
+            rounded_minutes = ((minutes // 15) + 1) * 15
+            if rounded_minutes >= 60:
+                suggested_next_utc = suggested_next_utc.replace(hour=suggested_next_utc.hour + 1, minute=0, second=0, microsecond=0)
+            else:
+                suggested_next_utc = suggested_next_utc.replace(minute=rounded_minutes, second=0, microsecond=0)
+            
+            # Return structured error response
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "startsAt"],
+                        "msg": f'Appointment cannot be scheduled in the past. Received: {starts_at_utc.isoformat()}Z, Current: {now_utc.isoformat()}Z',
+                        "type": "value_error",
+                        "code": "PAST_START",
+                        "ctx": {
+                            "received_utc": starts_at_utc.isoformat() + 'Z',
+                            "now_utc": now_utc.isoformat() + 'Z',
+                            "suggested_next_utc": suggested_next_utc.isoformat() + 'Z'
+                        }
+                    }
+                ]
+            )
+        
         # Log for observability (without PII)
-        print(f"🔍 POST /api/v1/appointments - starts_at_original={appointment.startsAt}, starts_at_utc={starts_at_utc.isoformat()}Z, now_utc={datetime.now(timezone.utc).isoformat()}Z")
+        print(f"🔍 POST /api/v1/appointments - tenantId={appointment.tenantId}, patientId={appointment.patientId}, consultorioId={appointment.consultorioId}")
+        print(f"🔍 POST /api/v1/appointments - starts_at_original={appointment.startsAt}, starts_at_utc={starts_at_utc.isoformat()}Z, now_utc={now_utc.isoformat()}Z")
+        
+        # Log consultório validation
+        if appointment.consultorioId is not None:
+            print(f"✅ Consultorio validated: id={consultorio.id}, nome={consultorio.nome}")
+        else:
+            print(f"ℹ️ No consultorio provided (optional)")
         
         db_appointment = Appointment(
             tenant_id=appointment.tenantId,
@@ -344,7 +389,7 @@ def create_appointment(
         db.commit()
         db.refresh(db_appointment)
         
-        print(f"✅ Appointment created: ID={db_appointment.id}, patient={patient.name}, tenant={appointment.tenantId}")
+        print(f"✅ Appointment created: ID={db_appointment.id}, patient={patient.name}, consultorio_id={db_appointment.consultorio_id}, tenant={appointment.tenantId}")
         return db_appointment
         
     except HTTPException:
@@ -352,13 +397,38 @@ def create_appointment(
     except ValueError as e:
         db.rollback()
         print(f"❌ Validation error: {str(e)}")
+        
+        # Check if this is a PAST_START error with structured context
+        if hasattr(e, 'code') and e.code == 'PAST_START':
+            # Return structured error response
+            raise HTTPException(
+                status_code=422,
+                detail=[
+                    {
+                        "loc": ["body", "startsAt"],
+                        "msg": str(e),
+                        "type": "value_error",
+                        "code": "PAST_START",
+                        "ctx": {
+                            "received_utc": getattr(e, 'received_utc', None),
+                            "now_utc": getattr(e, 'now_utc', None),
+                            "suggested_next_utc": getattr(e, 'suggested_next_utc', None)
+                        }
+                    }
+                ]
+            )
+        
+        # Generic validation error
         raise HTTPException(
             status_code=400,
             detail=f"Invalid data: {str(e)}"
         )
     except Exception as e:
         db.rollback()
+        import traceback
         print(f"❌ Failed to create appointment: {str(e)}")
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        print(f"❌ Appointment data: tenantId={appointment.tenantId}, patientId={appointment.patientId}, consultorioId={appointment.consultorioId}")
         raise HTTPException(
             status_code=500,
             detail="Failed to create appointment. Please try again later."

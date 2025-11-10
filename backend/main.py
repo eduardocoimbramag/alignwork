@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
@@ -52,6 +54,46 @@ app = FastAPI(
 # Register limiter with app
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Custom exception handler for validation errors with PAST_START code
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Custom handler for Pydantic validation errors.
+    Checks for PAST_START code in error messages and returns structured response.
+    """
+    errors = exc.errors()
+    
+    # Check if any error is related to PAST_START
+    for error in errors:
+        if error.get('type') == 'value_error':
+            msg = error.get('msg', '')
+            # Check if the error message contains PAST_START context
+            # The Pydantic error will have the message but we need to extract context
+            # from the original exception if available
+            if 'cannot be scheduled in the past' in msg.lower():
+                # Try to parse the error message to extract timestamps
+                # This is a fallback - ideally we'd have the context in the error
+                # For now, return a structured error without full context
+                return JSONResponse(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    content={
+                        "detail": [
+                            {
+                                "loc": error.get('loc', []),
+                                "msg": msg,
+                                "type": "value_error",
+                                "code": "PAST_START"
+                            }
+                        ]
+                    }
+                )
+    
+    # Default validation error response
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": errors}
+    )
 
 # CORS configuration
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8080")

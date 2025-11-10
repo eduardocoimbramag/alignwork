@@ -163,6 +163,27 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       const dataLocal = dayjs(formData.data!).format('YYYY-MM-DD');
       const startsAtLocal = `${dataLocal} ${formData.horaInicio}`;
 
+      // Regra F6: Pré-validação antes do submit
+      // Construir starts_at_utc e comparar com now_utc
+      const startsAtUTC = dayjs.tz(startsAtLocal, 'America/Recife').utc();
+      const nowUTC = dayjs.utc();
+      const gracePeriodMinutes = 5; // Grace period de 5 minutos (pode ser configurável)
+      const minAllowedUTC = nowUTC.subtract(gracePeriodMinutes, 'minutes');
+
+      if (startsAtUTC.isBefore(minAllowedUTC)) {
+        // Horário está no passado, bloquear envio
+        setErros(prev => ({
+          ...prev,
+          horaInicio: 'Este horário já passou. Selecione um horário futuro.'
+        }));
+        toast({
+          title: "Horário inválido",
+          description: "O horário selecionado já passou. Selecione um horário futuro.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       const createdAppointment = await createAppointment({
         patientId: formData.clienteId,
         startsAtLocal,
@@ -198,24 +219,69 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
       // Extrair mensagem de erro apropriada
       let errorMessage = "Tente novamente em alguns instantes";
       let errorTitle = "Erro ao agendar";
+      let suggestedNextUTC: string | null = null;
       
       // ApiError customizado (do nosso api.ts)
       if (error?.detail) {
         // Se for array de erros de validação do Pydantic
         if (Array.isArray(error.detail)) {
-          errorMessage = error.detail
-            .map((err: any) => {
-              const field = err.loc?.join('.') || '';
-              const msg = err.msg || err.message || '';
-              return field ? `${field}: ${msg}` : msg;
-            })
-            .join('; ');
+          // Procurar por erro PAST_START
+          const pastStartError = error.detail.find((err: any) => err.code === 'PAST_START');
+          
+          if (pastStartError) {
+            // Regra F5: Mensagem clara e ação corretiva
+            errorTitle = "Horário inválido";
+            errorMessage = "O horário selecionado já passou na sua região. Selecione um novo horário.";
+            suggestedNextUTC = pastStartError.ctx?.suggested_next_utc || null;
+            
+            // Se houver horário sugerido, converter para local e exibir
+            if (suggestedNextUTC) {
+              const suggestedLocal = dayjs(suggestedNextUTC).tz('America/Recife');
+              const suggestedDate = suggestedLocal.format('DD/MM/YYYY');
+              const suggestedTime = suggestedLocal.format('HH:mm');
+              
+              errorMessage = `O horário selecionado já passou na sua região. Próximo horário disponível: ${suggestedTime} (${suggestedDate}).`;
+              
+              // Pré-preencher formulário com horário sugerido automaticamente
+              const suggestedDateObj = suggestedLocal.toDate();
+              setFormData(prev => ({
+                ...prev,
+                data: suggestedDateObj,
+                horaInicio: suggestedTime
+              }));
+              
+              toast({
+                title: errorTitle,
+                description: errorMessage,
+                variant: "destructive"
+              });
+              
+              // Exibir toast adicional informando que o horário foi ajustado
+              setTimeout(() => {
+                toast({
+                  title: "Horário ajustado",
+                  description: `Horário ajustado automaticamente para ${suggestedTime} (${suggestedDate}). Você pode revisar e confirmar.`,
+                });
+              }, 500);
+              
+              return;
+            }
+          } else {
+            // Outros erros de validação
+            errorMessage = error.detail
+              .map((err: any) => {
+                const field = err.loc?.join('.') || '';
+                const msg = err.msg || err.message || '';
+                return field ? `${field}: ${msg}` : msg;
+              })
+              .join('; ');
+          }
         } else if (typeof error.detail === 'string') {
           errorMessage = error.detail;
           // Detectar se é erro de timezone/passado
           if (errorMessage.includes('cannot be scheduled in the past')) {
             errorTitle = "Horário inválido";
-            // A mensagem já contém horários recebidos e atuais do backend
+            errorMessage = "O horário selecionado já passou na sua região. Selecione um novo horário.";
           }
         } else if (typeof error.detail === 'object') {
           errorMessage = JSON.stringify(error.detail);
@@ -225,6 +291,7 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
         // Detectar se é erro de timezone/passado
         if (errorMessage.includes('cannot be scheduled in the past')) {
           errorTitle = "Horário inválido";
+          errorMessage = "O horário selecionado já passou na sua região. Selecione um novo horário.";
         }
       }
       
