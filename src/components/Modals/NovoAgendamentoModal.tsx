@@ -18,6 +18,7 @@ import { dayjs } from "@/lib/dayjs";
 import { useQuery } from "@tanstack/react-query";
 import { fetchConsultoriosLight, type ConsultorioLight } from "@/services/api";
 import { Building } from "lucide-react";
+import { formatCPF } from "@/lib/utils";
 
 /**
  * MODAL DE NOVO AGENDAMENTO
@@ -278,7 +279,7 @@ export const NovoAgendamentoModal = ({ isOpen, onClose }: NovoAgendamentoModalPr
                           />
                           <div>
                             <div className="font-medium">{cliente.nome}</div>
-                            <div className="text-sm text-muted-foreground">{cliente.cpf}</div>
+                            <div className="text-sm text-muted-foreground">{formatCPF(cliente.cpf)}</div>
                           </div>
                         </CommandItem>
                       ))}

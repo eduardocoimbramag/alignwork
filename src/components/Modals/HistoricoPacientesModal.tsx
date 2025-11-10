@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useApp } from "@/contexts/AppContext";
 import { Search, Calendar, Clock, FileText } from "lucide-react";
 import { Agendamento, Cliente } from "@/contexts/AppContext";
+import { formatCPF } from "@/lib/utils";
 
 interface HistoricoPacientesModalProps {
   isOpen: boolean;
@@ -81,7 +82,7 @@ export const HistoricoPacientesModal = ({ isOpen, onClose }: HistoricoPacientesM
                         <div className="flex justify-between items-center">
                           <div>
                             <p className="font-medium">{cliente.nome}</p>
-                            <p className="text-sm text-muted-foreground">{cliente.cpf}</p>
+                            <p className="text-sm text-muted-foreground">{formatCPF(cliente.cpf)}</p>
                           </div>
                           <Button variant="outline" size="sm">
                             Ver Histórico
@@ -98,7 +99,7 @@ export const HistoricoPacientesModal = ({ isOpen, onClose }: HistoricoPacientesM
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">{clienteSelecionado.nome}</h3>
-                  <p className="text-sm text-muted-foreground">{clienteSelecionado.cpf}</p>
+                  <p className="text-sm text-muted-foreground">{formatCPF(clienteSelecionado.cpf)}</p>
                 </div>
                 <Button variant="outline" onClick={handleReset}>
                   Buscar Outro Paciente

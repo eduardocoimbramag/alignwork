@@ -26,14 +26,15 @@ class PatientBase(BaseModel):
     def validate_cpf(cls, v):
         if not v or not v.strip():
             raise ValueError('cpf is required and cannot be empty')
-        # Remove caracteres não numéricos
+        # Remove caracteres não numéricos e normaliza
         cpf_numbers = re.sub(r'\D', '', v)
         if len(cpf_numbers) != 11:
             raise ValueError('cpf must have exactly 11 digits')
         # Verifica se não são todos os dígitos iguais
         if cpf_numbers == cpf_numbers[0] * 11:
             raise ValueError('cpf cannot have all digits the same')
-        return v
+        # Retornar CPF normalizado (somente dígitos) para armazenar no banco
+        return cpf_numbers
     
     @validator('phone')
     def validate_phone(cls, v):

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Response, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+import re
 from auth.dependencies import get_db
 from models.patient import Patient
 from schemas.patient import PatientCreate, PatientUpdate, PatientResponse, PatientPaginatedResponse
@@ -26,8 +27,12 @@ def create_patient(
     """
     response.headers["Cache-Control"] = "no-store"
     
-    # Verificar se CPF já existe
-    existing_patient = db.query(Patient).filter(Patient.cpf == patient.cpf).first()
+    # CPF já está normalizado pelo schema (somente dígitos)
+    # Verificar se CPF já existe no mesmo tenant (isolamento multi-tenant)
+    existing_patient = db.query(Patient).filter(
+        Patient.cpf == patient.cpf,
+        Patient.tenant_id == patient.tenant_id
+    ).first()
     if existing_patient:
         raise HTTPException(
             status_code=400,
@@ -91,9 +96,11 @@ def list_patients(
     # Aplicar filtro de busca
     if search:
         search_term = f"%{search}%"
+        # Normalizar termo de busca (remover máscara) para buscar CPF
+        search_normalized = re.sub(r'\D', '', search)
         query = query.filter(
             (Patient.name.ilike(search_term)) | 
-            (Patient.cpf.like(search_term.replace('%', '')))
+            (Patient.cpf.like(f"%{search_normalized}%"))
         )
     
     # Contar total (antes de aplicar paginação)

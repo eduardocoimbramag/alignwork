@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { formatCPF } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -142,7 +143,7 @@ export const DesmarcarAgendamentoModal = ({ isOpen, onClose }: DesmarcarAgendame
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{cliente.nome}</p>
-                        <p className="text-sm text-muted-foreground">{cliente.cpf}</p>
+                        <p className="text-sm text-muted-foreground">{formatCPF(cliente.cpf)}</p>
                       </div>
                     </button>
                   ))}
