@@ -1,12 +1,15 @@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Mail, Phone, Building2 } from "lucide-react";
+import { Gender, GENDER_LABELS } from "@/types/auth";
 
 interface ProfileFormContentProps {
     formData: {
         first_name: string;
         last_name: string;
         email: string;
+        gender: string;
         phone_personal: string;
         phone_professional: string;
         phone_clinic: string;
@@ -15,6 +18,7 @@ interface ProfileFormContentProps {
         first_name?: string;
         last_name?: string;
         email?: string;
+        gender?: string;
         phone_personal?: string;
         phone_professional?: string;
         phone_clinic?: string;
@@ -117,6 +121,34 @@ export const ProfileFormContent = ({
                     )}
                     <p className="text-xs text-muted-foreground">
                         Este será seu email de login
+                    </p>
+                </div>
+
+                {/* Gênero */}
+                <div className="space-y-2">
+                    <Label htmlFor="gender" className="flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Gênero
+                    </Label>
+                    <Select
+                        value={formData.gender}
+                        onValueChange={(value) => onChange('gender', value)}
+                    >
+                        <SelectTrigger id="gender" className={errors.gender ? 'border-destructive' : ''}>
+                            <SelectValue placeholder="Selecione seu gênero (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={Gender.MALE}>{GENDER_LABELS[Gender.MALE]}</SelectItem>
+                            <SelectItem value={Gender.FEMALE}>{GENDER_LABELS[Gender.FEMALE]}</SelectItem>
+                            <SelectItem value={Gender.OTHER}>{GENDER_LABELS[Gender.OTHER]}</SelectItem>
+                            <SelectItem value={Gender.PREFER_NOT_TO_SAY}>{GENDER_LABELS[Gender.PREFER_NOT_TO_SAY]}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {errors.gender && (
+                        <p className="text-xs text-destructive">{errors.gender}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                        Usado para personalizar seu tratamento (Dr./Dra.)
                     </p>
                 </div>
             </div>

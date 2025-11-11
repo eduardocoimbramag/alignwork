@@ -20,6 +20,7 @@ class User(Base):
     full_name = Column(String, nullable=True)  # Deprecated - usar first_name + last_name
     first_name = Column(String, nullable=False, default="Usuario")
     last_name = Column(String, nullable=False, default="Padrao")
+    gender = Column(String(50), nullable=True)  # 'male', 'female', 'other', 'prefer_not_to_say'
     profile_photo_url = Column(String, nullable=True)
     
     # Telefones

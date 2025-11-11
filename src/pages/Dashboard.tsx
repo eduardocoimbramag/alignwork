@@ -42,6 +42,12 @@ const Dashboard = () => {
   const hoje = new Date();
   const diasSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
   const diaAtual = diasSemana[hoje.getDay()];
+  
+  // Gênero do artigo baseado no dia da semana
+  // Domingo, sábado = masculino (um ótimo)
+  // Segunda, terça, quarta, quinta, sexta = feminino (uma ótima)
+  const generoArtigo = ['um ótimo', 'uma ótima', 'uma ótima', 'uma ótima', 'uma ótima', 'uma ótima', 'um ótimo'];
+  const artigoAtual = generoArtigo[hoje.getDay()];
 
   // Contar consultas de hoje
   const consultasHoje = buscarAgendamentosPorData(hoje);
@@ -50,22 +56,41 @@ const Dashboard = () => {
 
   // Função para obter mensagem de boas-vindas personalizada
   const getGreetingMessage = (user: User | null): string => {
+    console.log('[Dashboard] 🔍 Dados do usuário recebido:', user);
+    console.log('[Dashboard] 🔍 first_name:', user?.first_name);
+    console.log('[Dashboard] 🔍 last_name:', user?.last_name);
+    console.log('[Dashboard] 🔍 gender:', user?.gender);
+    
     if (!user) {
-      return "Bom dia! 👋";
+      return "Seja bem-vindo(a)!";
     }
 
     const firstName = user.first_name?.trim() || "";
     const lastName = user.last_name?.trim() || "";
+    
+    console.log('[Dashboard] 🔍 firstName processado:', firstName);
+    console.log('[Dashboard] 🔍 lastName processado:', lastName);
+    
+    // Determinar título baseado no gênero
+    // Apenas "female" usa "Dra.", todos os outros (male, other, prefer_not_to_say, null) usam "Dr."
+    const title = user.gender === 'female' ? 'Dra.' : 'Dr.';
+    
+    console.log('[Dashboard] 🔍 title determinado:', title);
 
     if (firstName && lastName) {
-      return `Dr. ${firstName} ${lastName}`;
+      const greeting = `Seja bem-vindo, ${title} ${firstName} ${lastName}`;
+      console.log('[Dashboard] ✅ Mensagem gerada:', greeting);
+      return greeting;
     }
 
     if (firstName) {
-      return `Dr. ${firstName}`;
+      const greeting = `Seja bem-vindo, ${title} ${firstName}`;
+      console.log('[Dashboard] ✅ Mensagem gerada (só nome):', greeting);
+      return greeting;
     }
 
-    return "Bom dia! 👋";
+    console.log('[Dashboard] ⚠️ Sem nome - retornando fallback');
+    return "Seja bem-vindo(a)!";
   };
 
   return (
@@ -81,7 +106,7 @@ const Dashboard = () => {
               {getGreetingMessage(user)}
             </h2>
             <p className="text-muted-foreground">
-              Que você tenha uma ótima {diaAtual}. Hoje temos {numeroConsultas} consultas agendadas!
+              Que você tenha {artigoAtual} {diaAtual}. Hoje temos {numeroConsultas} consultas agendadas!
             </p>
           </div>
 

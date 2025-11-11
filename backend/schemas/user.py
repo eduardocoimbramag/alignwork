@@ -18,6 +18,7 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    gender: Optional[str] = None
     phone_personal: Optional[str] = None
     phone_professional: Optional[str] = None
     phone_clinic: Optional[str] = None
@@ -28,6 +29,12 @@ class UserUpdate(BaseModel):
         if v and len(v.strip()) < 2:
             raise ValueError('Nome deve ter pelo menos 2 caracteres')
         return v.strip() if v else None
+    
+    @validator('gender')
+    def validate_gender(cls, v):
+        if v is not None and v not in ['male', 'female', 'other', 'prefer_not_to_say']:
+            raise ValueError('Gênero inválido. Valores aceitos: male, female, other, prefer_not_to_say')
+        return v
     
     @validator('phone_personal', 'phone_professional', 'phone_clinic')
     def validate_phone(cls, v):
@@ -44,6 +51,7 @@ class UserResponse(BaseModel):
     first_name: str
     last_name: str
     full_name: Optional[str] = None  # Deprecated - manter para compatibilidade
+    gender: Optional[str] = None
     profile_photo_url: Optional[str] = None
     phone_personal: Optional[str] = None
     phone_professional: Optional[str] = None

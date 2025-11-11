@@ -387,6 +387,7 @@ const PerfilContent = () => {
     first_name: "",
     last_name: "",
     email: "",
+    gender: "",
     phone_personal: "",
     phone_professional: "",
     phone_clinic: ""
@@ -408,6 +409,7 @@ const PerfilContent = () => {
         first_name: user.first_name || "",
         last_name: user.last_name || "",
         email: user.email || "",
+        gender: user.gender || "",
         phone_personal: user.phone_personal || "",
         phone_professional: user.phone_professional || "",
         phone_clinic: user.phone_clinic || ""
@@ -501,6 +503,7 @@ const PerfilContent = () => {
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email,
+        gender: formData.gender || undefined,
         phone_personal: formData.phone_personal || undefined,
         phone_professional: formData.phone_professional || undefined,
         phone_clinic: formData.phone_clinic || undefined
@@ -624,6 +627,7 @@ const PerfilContent = () => {
                 first_name: user.first_name || "",
                 last_name: user.last_name || "",
                 email: user.email || "",
+                gender: user.gender || "",
                 phone_personal: user.phone_personal || "",
                 phone_professional: user.phone_professional || "",
                 phone_clinic: user.phone_clinic || ""

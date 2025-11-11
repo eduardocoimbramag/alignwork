@@ -4,6 +4,7 @@ export interface User {
     first_name: string;
     last_name: string;
     full_name?: string;  // Deprecated - manter para compatibilidade
+    gender?: string | null;
     profile_photo_url?: string | null;
     phone_personal?: string | null;
     phone_professional?: string | null;
@@ -14,10 +15,25 @@ export interface User {
     updated_at?: string;
 }
 
+export enum Gender {
+    MALE = 'male',
+    FEMALE = 'female',
+    OTHER = 'other',
+    PREFER_NOT_TO_SAY = 'prefer_not_to_say'
+}
+
+export const GENDER_LABELS: Record<Gender, string> = {
+    [Gender.MALE]: 'Masculino',
+    [Gender.FEMALE]: 'Feminino',
+    [Gender.OTHER]: 'Nenhum desses',
+    [Gender.PREFER_NOT_TO_SAY]: 'Prefiro não informar'
+};
+
 export interface UserUpdatePayload {
     first_name?: string;
     last_name?: string;
     email?: string;
+    gender?: string;
     phone_personal?: string;
     phone_professional?: string;
     phone_clinic?: string;
@@ -48,12 +64,12 @@ export interface RegisterData {
 }
 
 export interface AuthContextType {
-    user: UserPublic | null;
+    user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
     login: (credentials: LoginCredentials) => Promise<void>;
     register: (data: RegisterData) => Promise<void>;
     logout: () => Promise<void>;
     refreshToken: () => Promise<void>;
-    doLogin: (credentials: LoginCredentials) => Promise<UserPublic>;
+    doLogin: (credentials: LoginCredentials) => Promise<User>;
 }

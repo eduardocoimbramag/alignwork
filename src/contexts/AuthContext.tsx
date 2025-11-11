@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { UserPublic, LoginCredentials, RegisterData, AuthContextType } from '../types/auth';
+import { User, LoginCredentials, RegisterData, AuthContextType } from '../types/auth';
 import { auth } from '../services/auth';
 import { useTenant } from './TenantContext';
 import { useQueryClient, QueryClient } from '@tanstack/react-query';
@@ -57,7 +57,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-    const [user, setUser] = useState<UserPublic | null>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const { tenantId, setTenantId } = useTenant();
     const queryClient = useQueryClient();
@@ -84,7 +84,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         checkAuthStatus();
     }, [queryClient, tenantId]);
 
-    const doLogin = async (credentials: LoginCredentials): Promise<UserPublic> => {
+    const doLogin = async (credentials: LoginCredentials): Promise<User> => {
         const userData = await auth.login(credentials);
         setUser(userData);
         
